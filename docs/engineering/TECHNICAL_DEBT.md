@@ -1,0 +1,66 @@
+# TECHNICAL_DEBT.md
+
+# Trading Academy — Technical Debt Register
+
+Required by NON_NEGOTIABLES.md Rule 17 and ENGINEERING_PRINCIPLES.md §26.
+Debt is permitted only if it is **intentional, visible, and temporary**. If it is not in this file, it is not permitted.
+
+Reviewed at every milestone boundary. If this list grows faster than it shrinks for two consecutive milestones, feature work stops until it is paid down.
+
+**Status:** `open` · `paid` · `accepted` (deliberately permanent — requires a stated reason)
+
+---
+
+## Template — copy this
+
+```md
+### TD-nn · <one-line title>
+- **Incurred:** M-x, YYYY-MM-DD
+- **Why:** what forced the shortcut
+- **Risk if unpaid:** concrete consequence, with the RISKS R-n reference if it maps to one
+- **Proposed fix:** what "paid" looks like, with a rough estimate
+- **Trigger to pay:** the condition that makes this urgent (a milestone, a user count, a cost threshold)
+- **Owner:** Christian
+- **Status:** open
+```
+
+---
+
+## Open debt
+
+### TD-01 · PROJECT_INSTRUCTIONS.md referenced but never written
+- **Incurred:** M-1, 2026-07-13
+- **Why:** PROJECT_MAP.md names it as the mandatory first-read entry point indexing the doc hierarchy, but it was never created; DOC_CONSISTENCY_REVIEW.md C-2 flagged this before M-1 and it wasn't resolved before implementation began.
+- **Risk if unpaid:** New contributors (or a future session) have no single entry point into the doc hierarchy; PROJECT_MAP.md's own reading order points at a dead reference.
+- **Proposed fix:** Write a short index document listing precedence order and pointing to each doc. ~30 min.
+- **Trigger to pay:** Before M-2 begins.
+- **Owner:** Christian
+- **Status:** open
+
+### TD-02 · ADR-013/014/015 referenced but never written
+- **Incurred:** M-1, 2026-07-13
+- **Why:** DOC_CONSISTENCY_REVIEW.md called for three ADRs before M-1 (ADR-013 engine location, ADR-014 numeric precision, ADR-015 env/secrets). ENGINEERING_PRINCIPLES.md §3.1 already describes ADR-013's resolution as settled, citing it as if it exists. None were written; ADR-016 was written and numbered past the gap.
+- **Risk if unpaid:** Non-obvious domain rules (engine location, money arithmetic, secrets handling) cite ADRs that don't exist — a citation to nothing, which ENGINEERING_PRINCIPLES §15 calls worse than no citation.
+- **Proposed fix:** Write ADR-013 (supersedes ADR-007, location only), ADR-014, and ADR-015 — each a short transcription of decisions already made in ENGINEERING_PRINCIPLES.md into immutable ADR form. ~30 min each.
+- **Trigger to pay:** ADR-013 and ADR-014 before M-8 (simulator engine); ADR-015 before Supabase is wired (later this milestone).
+- **Owner:** Christian
+- **Status:** open
+
+---
+
+## Paid debt
+
+*(none)*
+
+---
+
+## Debt that may never be taken
+
+These are not shortcuts. Taking them means the product is wrong, not merely unfinished.
+
+- Skipping RLS policies on a table
+- Skipping tests on the fill engine, statistics formulas, or XP grants
+- Trusting a client-supplied `userId` in an Edge Function
+- Floating-point arithmetic on money
+- Shipping a number that might be wrong rather than shipping no number
+- Anything that violates NON_NEGOTIABLES.md
