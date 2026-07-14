@@ -44,7 +44,7 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Proposed fix:** Write ADR-013 (supersedes ADR-007, location only), ADR-014, and ADR-015 — each a short transcription of decisions already made in ENGINEERING_PRINCIPLES.md into immutable ADR form. ~30 min each.
 - **Trigger to pay:** ADR-013 and ADR-014 before M-8 (simulator engine); ADR-015 before Supabase is wired (later this milestone).
 - **Owner:** Christian
-- **Status:** open
+- **Status:** partially paid — ADR-015 written M-1 Session 4, 2026-07-14, before Supabase wiring per the original trigger. ADR-013 and ADR-014 remain outstanding; still open until M-8.
 
 ### TD-03 · Scaffold dependencies use `^` ranges instead of exact pins
 - **Incurred:** M-1, 2026-07-13

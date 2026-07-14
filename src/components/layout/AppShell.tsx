@@ -1,6 +1,6 @@
-import { PageFrame } from "@/components/layout/page-frame";
-import { SiteNav } from "@/components/layout/site-nav";
-import { SkipLink } from "@/components/layout/skip-link";
+import { PageFrame } from "@/components/layout/PageFrame";
+import { SiteNav } from "@/components/layout/SiteNav";
+import { SkipLink } from "@/components/layout/SkipLink";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
