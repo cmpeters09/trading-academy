@@ -9,3 +9,4 @@
 - **The user is a beginner.** Explain what you're doing and why, briefly, as you go.
 - **Any shortcut gets logged** in `docs/engineering/TECHNICAL_DEBT.md` per Rule 17. Never fix a doc gap silently — log it or ask.
 - **One milestone in progress at a time** (§24).
+- **GitHub CLI (`gh`) is installed** (via `winget install --id GitHub.cli --source winget`). Use it to open PRs (`gh pr create`) instead of asking the user to click a web link. Requires `gh auth login` once per machine — that step is interactive and belongs to the user, never run it unattended.
