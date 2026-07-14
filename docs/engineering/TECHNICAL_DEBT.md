@@ -46,6 +46,15 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Owner:** Christian
 - **Status:** open
 
+### TD-03 · Scaffold dependencies use `^` ranges instead of exact pins
+- **Incurred:** M-1, 2026-07-13
+- **Why:** `create-next-app` and the initial scaffold pinned `typescript`, `eslint`, `tailwindcss`, `@tailwindcss/postcss`, `@types/node`, `@types/react`, and `@types/react-dom` with `^` ranges. ENGINEERING_PRINCIPLES.md §25 requires exact versions, updated deliberately via a scheduled dependency PR. Re-pinning the whole scaffold wasn't in scope of the Session 2 tooling work (CI/commitlint) that surfaced this.
+- **Risk if unpaid:** A `^` range can resolve to a different version on a fresh `npm install` (e.g. a new contributor, or CI cache miss) than what was last tested locally, silently changing lint/typecheck/build behavior between environments.
+- **Proposed fix:** Pin each `^`-ranged dependency to its currently installed exact version in `package.json`, in a dedicated dependency PR. ~15 min.
+- **Trigger to pay:** Before M-3, when the first non-scaffold dependencies get added — pin the scaffold at the same time so all dependencies follow the same exact-version convention from that point on.
+- **Owner:** Christian
+- **Status:** open
+
 ---
 
 ## Paid debt
