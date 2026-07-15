@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { env } from "@/lib/env";
+import { logger, serializeError } from "@/lib/logger";
 
 const PUBLIC_PATH_PREFIXES = ["/login", "/signup", "/forgot-password", "/update-password", "/auth"];
 
@@ -45,8 +46,22 @@ export async function updateSession(request: NextRequest) {
 
   // getClaims() validates the JWT (locally against cached signing keys when
   // possible), unlike getSession(), which must never be trusted server-side.
-  const { data } = await supabase.auth.getClaims();
-  const user = data?.claims;
+  // It can also throw outright — it may fetch Supabase's JWKS endpoint over
+  // HTTPS internally, the exact same kind of outbound call that failed
+  // elsewhere in this project from a TLS-interception issue on this
+  // network. Proxy runs before every request site-wide (even to public
+  // paths), so an uncaught throw here doesn't just break one action — it
+  // 500s the entire app. Fail closed instead: treat a thrown error the same
+  // as "no session" (§7 — a recoverable infrastructure error, not a crash),
+  // which the existing redirect-to-login logic below already handles.
+  let user: unknown;
+  try {
+    const { data } = await supabase.auth.getClaims();
+    user = data?.claims;
+  } catch (err) {
+    logger.error("proxy_get_claims_failed", serializeError(err));
+    user = undefined;
+  }
 
   if (!user && !isPublicPath(request.nextUrl.pathname)) {
     const url = request.nextUrl.clone();
