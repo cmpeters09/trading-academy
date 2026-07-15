@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
@@ -21,6 +22,7 @@ import { signUpSchema, type SignUpValues } from "../schemas";
 export function SignUpForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const router = useRouter();
   const {
     register,
     handleSubmit,
@@ -38,6 +40,14 @@ export function SignUpForm() {
 
     if (!result.ok) {
       setSubmitError(result.error);
+      return;
+    }
+
+    // "Confirm email" is a Supabase project setting (TD-04), not something
+    // this code controls — sessionCreated tells us which happened this
+    // time. If it's already on, there's nothing to check an email for.
+    if (result.sessionCreated) {
+      router.push("/");
       return;
     }
 

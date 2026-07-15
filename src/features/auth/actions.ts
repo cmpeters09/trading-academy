@@ -34,9 +34,21 @@ function isSafeRedirectPath(path: string | undefined): path is string {
  */
 export type AuthActionResult = { ok: true } | { ok: false; error: string };
 
+/**
+ * Whether "Confirm email" is on is a Supabase project setting (TD-04), not
+ * something this code controls — signUp() itself tells us which happened:
+ * data.session is populated when no confirmation was required (the user is
+ * immediately logged in), null when a confirmation email is pending. The
+ * form needs to know which, so it shows the right thing instead of always
+ * claiming "check your email" even when there's nothing to check.
+ */
+export type SignUpActionResult =
+  | { ok: true; sessionCreated: boolean }
+  | { ok: false; error: string };
+
 export async function signUpAction(
   input: SignUpValues & { timezone: string },
-): Promise<AuthActionResult> {
+): Promise<SignUpActionResult> {
   const parsed = signUpSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "Check the highlighted fields and try again." };
@@ -45,7 +57,7 @@ export async function signUpAction(
   const supabase = await createClient();
 
   try {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: parsed.data.email,
       password: parsed.data.password,
       options: {
@@ -63,14 +75,14 @@ export async function signUpAction(
       logger.warn("auth_sign_up_failed", { code: error.code, status: error.status });
       return { ok: false, error: error.message };
     }
+
+    return { ok: true, sessionCreated: Boolean(data.session) };
   } catch (err) {
     logger.error("auth_sign_up_unexpected_error", {
       ...serializeError(err),
     });
     return { ok: false, error: "Something went wrong. Please try again." };
   }
-
-  return { ok: true };
 }
 
 export async function logInAction(
