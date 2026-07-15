@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 
-import { logger } from "@/lib/logger";
+import { logger, serializeError } from "@/lib/logger";
 import { createClient } from "@/services/supabase/server";
 
 import {
@@ -65,7 +65,7 @@ export async function signUpAction(
     }
   } catch (err) {
     logger.error("auth_sign_up_unexpected_error", {
-      message: err instanceof Error ? err.message : String(err),
+      ...serializeError(err),
     });
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -92,7 +92,7 @@ export async function logInAction(
     }
   } catch (err) {
     logger.error("auth_log_in_unexpected_error", {
-      message: err instanceof Error ? err.message : String(err),
+      ...serializeError(err),
     });
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -127,7 +127,7 @@ export async function requestPasswordResetAction(
     }
   } catch (err) {
     logger.error("auth_password_reset_request_unexpected_error", {
-      message: err instanceof Error ? err.message : String(err),
+      ...serializeError(err),
     });
     return { ok: false, error: "Something went wrong. Please try again." };
   }
@@ -154,7 +154,7 @@ export async function updatePasswordAction(
     }
   } catch (err) {
     logger.error("auth_password_update_unexpected_error", {
-      message: err instanceof Error ? err.message : String(err),
+      ...serializeError(err),
     });
     return { ok: false, error: "Something went wrong. Please try again." };
   }
