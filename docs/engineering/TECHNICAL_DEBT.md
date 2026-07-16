@@ -46,15 +46,6 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Owner:** Christian
 - **Status:** partially paid — ADR-015 written M-1 Session 4, 2026-07-14, before Supabase wiring per the original trigger. ADR-013 and ADR-014 remain outstanding; still open until M-8.
 
-### TD-03 · Scaffold dependencies use `^` ranges instead of exact pins
-- **Incurred:** M-1, 2026-07-13
-- **Why:** `create-next-app` and the initial scaffold pinned `typescript`, `eslint`, `tailwindcss`, `@tailwindcss/postcss`, `@types/node`, `@types/react`, and `@types/react-dom` with `^` ranges. ENGINEERING_PRINCIPLES.md §25 requires exact versions, updated deliberately via a scheduled dependency PR. Re-pinning the whole scaffold wasn't in scope of the Session 2 tooling work (CI/commitlint) that surfaced this.
-- **Risk if unpaid:** A `^` range can resolve to a different version on a fresh `npm install` (e.g. a new contributor, or CI cache miss) than what was last tested locally, silently changing lint/typecheck/build behavior between environments.
-- **Proposed fix:** Pin each `^`-ranged dependency to its currently installed exact version in `package.json`, in a dedicated dependency PR. ~15 min.
-- **Trigger to pay:** Before M-3, when the first non-scaffold dependencies get added — pin the scaffold at the same time so all dependencies follow the same exact-version convention from that point on.
-- **Owner:** Christian
-- **Status:** open
-
 ### TD-04 · Email confirmation disabled for local development
 - **Incurred:** M-2, 2026-07-15
 - **Why:** Editing Supabase's email templates (needed so the confirmation/recovery links point at `/auth/confirm` with `token_hash`/`type`, per PR #5) is now gated behind configuring custom SMTP, which isn't set up yet. Rather than block the auth-UI PR on standing up SMTP, "Confirm email" was disabled in Authentication -> Email Provider settings for the dev phase — signups now get an active session immediately, with no `/auth/confirm` round trip.
@@ -69,7 +60,14 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 
 ## Paid debt
 
-*(none)*
+### TD-03 · Scaffold dependencies use `^` ranges instead of exact pins
+- **Incurred:** M-1, 2026-07-13
+- **Why:** `create-next-app` and the initial scaffold pinned `typescript`, `eslint`, `tailwindcss`, `@tailwindcss/postcss`, `@types/node`, `@types/react`, and `@types/react-dom` with `^` ranges. ENGINEERING_PRINCIPLES.md §25 requires exact versions, updated deliberately via a scheduled dependency PR. Re-pinning the whole scaffold wasn't in scope of the Session 2 tooling work (CI/commitlint) that surfaced this.
+- **Risk if unpaid:** A `^` range can resolve to a different version on a fresh `npm install` (e.g. a new contributor, or CI cache miss) than what was last tested locally, silently changing lint/typecheck/build behavior between environments.
+- **Proposed fix:** Pin each `^`-ranged dependency to its currently installed exact version in `package.json`, in a dedicated dependency PR. ~15 min.
+- **Trigger to pay:** Before M-3, when the first non-scaffold dependencies get added — pin the scaffold at the same time so all dependencies follow the same exact-version convention from that point on.
+- **Owner:** Christian
+- **Status:** paid — M-3, 2026-07-16. All seven pinned to their currently installed exact versions (`typescript` 5.9.3, `eslint` 9.39.5, `tailwindcss`/`@tailwindcss/postcss` 4.3.2, `@types/node` 20.19.43, `@types/react` 19.2.17, `@types/react-dom` 19.2.3); lockfile regenerated to match.
 
 ---
 
