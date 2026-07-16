@@ -16,22 +16,26 @@ Idempotent by design, safe to re-run:
 Writes go through the service role key, never the anon key (ADR-012:
 instruments/candles/dataset_segments are default-deny reference tables,
 readable by any authenticated user but writable only via service role).
-Credentials are read from the environment -- never hardcoded, never read
-from a .env file by this script or committed anywhere:
 
-    SUPABASE_URL               Project URL
-    SUPABASE_SERVICE_ROLE_KEY  service_role secret key
-    (both from Dashboard -> Project Settings -> API)
+The project URL isn't secret and can be exported as an env var. The
+service_role key is a secret and is deliberately NOT read from an env var
+here: `export`/`$env:` puts it in shell history, and this repo is public.
+Instead, if SUPABASE_SERVICE_ROLE_KEY isn't already set, the script prompts
+for it via getpass (input hidden, never written to disk or history) --
+same "never persisted, never handled by tooling" bar as any other secret
+in this project.
 
-Usage (PowerShell):
-    $env:SUPABASE_URL = "https://xxxx.supabase.co"
-    $env:SUPABASE_SERVICE_ROLE_KEY = "eyJ..."
+    SUPABASE_URL  Project URL (Dashboard -> Project Settings -> API)
+
+Usage:
     pip install -r supabase/scripts/requirements.txt
-    python supabase/scripts/import_yfinance.py
+    export SUPABASE_URL="https://xxxx.supabase.co"   # not secret
+    python supabase/scripts/import_yfinance.py       # prompts for the key
 """
 
 from __future__ import annotations
 
+import getpass
 import os
 import sys
 
@@ -55,14 +59,23 @@ CANDLE_BATCH_SIZE = 500  # keep individual upsert requests small
 
 def get_client() -> Client:
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not key:
+    if not url:
         sys.exit(
-            "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in the "
-            "environment (Dashboard -> Project Settings -> API). Refusing "
-            "to run without them rather than fail confusingly on the first "
-            "write -- RLS would silently reject it under any other role."
+            "SUPABASE_URL must be set in the environment (Dashboard -> "
+            "Project Settings -> API). Refusing to run without it rather "
+            "than fail confusingly on the first request."
         )
+
+    # Deliberately not read from an env var (see module docstring): prompt
+    # so the service_role key is never echoed, never in shell history, and
+    # never written anywhere. Falls back to an existing env var only if the
+    # caller already set one (e.g. a secrets-manager-backed CI run).
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or getpass.getpass(
+        "Supabase service_role key (Project Settings -> API; input hidden, not stored): "
+    )
+    if not key:
+        sys.exit("A service_role key is required -- RLS rejects writes from every other role.")
+
     return create_client(url, key)
 
 
