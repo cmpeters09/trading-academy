@@ -76,6 +76,18 @@ export async function signUpAction(
       return { ok: false, error: error.message };
     }
 
+    // Diagnostic for TD-04: sessionCreated already drives the UI branch below,
+    // but when it disagrees with the dashboard's "Confirm email" toggle, these
+    // are the fields that show whether Supabase actually treated this as
+    // confirmation-required — booleans/counts only, never the email or token.
+    logger.debug("auth_sign_up_response", {
+      hasSession: Boolean(data.session),
+      hasUser: Boolean(data.user),
+      identitiesCount: data.user?.identities?.length ?? null,
+      emailConfirmedAt: Boolean(data.user?.email_confirmed_at),
+      confirmationSentAt: Boolean(data.user?.confirmation_sent_at),
+    });
+
     return { ok: true, sessionCreated: Boolean(data.session) };
   } catch (err) {
     logger.error("auth_sign_up_unexpected_error", {
