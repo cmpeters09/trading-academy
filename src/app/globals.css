@@ -75,7 +75,15 @@
   --destructive: oklch(0.577 0.245 27.325);
   --success: oklch(0.627 0.194 149.214);
   --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
+  /* shadcn's "nova" preset default here was also oklch(0.922) — ~1.25:1
+     against the oklch(1) white background, far under the §11 3:1 floor for
+     UI components. Caught screenshotting the auth forms in light mode (the
+     input borders were essentially invisible). Verified via canvas pixel
+     readback + the real WCAG contrast formula, not eyeballed: 0.556
+     resolves to rgb(115,115,115) against white, 4.74:1. --border is left
+     at the original value: it's decorative (card/nav dividers), not a UI
+     component boundary, so §11 doesn't require it. */
+  --input: oklch(0.556 0 0);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);

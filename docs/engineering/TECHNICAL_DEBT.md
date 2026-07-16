@@ -55,6 +55,16 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Owner:** Christian
 - **Status:** open
 
+### TD-04 · Email confirmation disabled for local development
+- **Incurred:** M-2, 2026-07-15
+- **Why:** Editing Supabase's email templates (needed so the confirmation/recovery links point at `/auth/confirm` with `token_hash`/`type`, per PR #5) is now gated behind configuring custom SMTP, which isn't set up yet. Rather than block the auth-UI PR on standing up SMTP, "Confirm email" was disabled in Authentication -> Email Provider settings for the dev phase — signups now get an active session immediately, with no `/auth/confirm` round trip.
+- **Incident, 2026-07-16:** Repeated manual signup testing against fake addresses (`test-...@example.com`, `claude-agent-test-...@gmail.com`, and other one-off test emails) caused Supabase's confirmation emails to bounce and triggered a bounce-rate warning from Supabase, with a threat to throttle sending if it continued. Mitigated in code (not by touching SMTP/dashboard email settings): `signUpSchema`/`forgotPasswordSchema` now reject RFC 2606-reserved test domains (`example.com`/`.org`/`.net`/`.edu`, `.test`/`.example`/`.invalid`/`.localhost`) before a request ever reaches Supabase. This reduces *accidental* bounces from careless test input; it does not change the underlying trade-off below, and testing the forgot-password flow against any address that isn't a real, owned inbox will still bounce — `resetPasswordForEmail` always sends mail regardless of the "Confirm email" setting.
+- **Risk if unpaid:** Anyone can sign up with an email address they don't own; nothing verifies it's real or belongs to them. Acceptable only while the product has zero external users. Shipping this as-is to real users would mean unverified accounts, no protection against typo'd or fake emails, and password-reset links being usable by whoever controls an unverified inbox.
+- **Proposed fix:** Configure custom SMTP (Dashboard -> Project Settings -> Auth -> SMTP Settings), point the "Confirm signup" and "Reset password" email templates at `/auth/confirm` using the exact values in PR #5's description, then re-enable "Confirm email" in Email Provider settings. ~30-45 min once an SMTP provider is chosen. **Deliberately not being done now** — still deferred to pre-launch, per the original trigger below.
+- **Trigger to pay:** Before the first external/real user signs up — i.e., before any public or shared deployment. Blocks nothing before then.
+- **Owner:** Christian
+- **Status:** open
+
 ---
 
 ## Paid debt
