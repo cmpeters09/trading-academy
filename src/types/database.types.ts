@@ -12,8 +12,151 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
+      candles: {
+        Row: {
+          close: number
+          high: number
+          instrument_id: string
+          low: number
+          open: number
+          timeframe: string
+          ts: string
+          volume: number
+        }
+        Insert: {
+          close: number
+          high: number
+          instrument_id: string
+          low: number
+          open: number
+          timeframe: string
+          ts: string
+          volume?: number
+        }
+        Update: {
+          close?: number
+          high?: number
+          instrument_id?: string
+          low?: number
+          open?: number
+          timeframe?: string
+          ts?: string
+          volume?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candles_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dataset_segments: {
+        Row: {
+          description: string | null
+          difficulty: string | null
+          ends_at: string
+          id: string
+          instrument_id: string
+          starts_at: string
+          tags: string[]
+          timeframe: string
+          title: string
+        }
+        Insert: {
+          description?: string | null
+          difficulty?: string | null
+          ends_at: string
+          id?: string
+          instrument_id: string
+          starts_at: string
+          tags?: string[]
+          timeframe: string
+          title: string
+        }
+        Update: {
+          description?: string | null
+          difficulty?: string | null
+          ends_at?: string
+          id?: string
+          instrument_id?: string
+          starts_at?: string
+          tags?: string[]
+          timeframe?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dataset_segments_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      instruments: {
+        Row: {
+          asset_class: string
+          currency: string
+          id: string
+          is_active: boolean
+          name: string
+          point_value: number
+          symbol: string
+          tick_size: number
+        }
+        Insert: {
+          asset_class: string
+          currency?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          point_value?: number
+          symbol: string
+          tick_size?: number
+        }
+        Update: {
+          asset_class?: string
+          currency?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          point_value?: number
+          symbol?: string
+          tick_size?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -219,6 +362,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
