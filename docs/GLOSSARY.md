@@ -20,13 +20,13 @@ Terms defined here should be reusable, near-verbatim, in `src/content/lessons/`.
 
 **Timeframe** — the period one candle covers (1m, 5m, 1h, 1d).
 
-**Long / short** — ⬜
+**Long / short** — Long: buy first, sell later, profit if the price rises. Short: sell borrowed shares first, buy back later, profit if the price falls. Shorting risk is uncapped, since price can rise indefinitely.
 
-**Fill** — ⬜ the price at which an order actually executes, which is not necessarily the price you wanted.
+**Fill** — the price at which an order actually executes, which is not necessarily the price you wanted.
 
-**Slippage** — ⬜
+**Slippage** — the gap between the price you expected and the price you actually got, usually from fast-moving markets or thin volume.
 
-**Spread** — ⬜
+**Spread** — the gap between the bid (highest price a buyer will pay) and the ask (lowest price a seller will accept). Crossing the spread is a built-in cost of trading immediately.
 
 **Commission** — ⬜
 
@@ -34,16 +34,16 @@ Terms defined here should be reusable, near-verbatim, in `src/content/lessons/`.
 
 ## Risk — the concepts the product exists to teach
 
-**Position sizing** — ⬜ *how much* to buy, derived from how much you're willing to lose. The schema caps default risk at 5% for this reason.
+**Position sizing** — how many shares/contracts to trade, calculated from how much you're willing to lose (risk %) divided by the distance to your stop loss — not from how much you want to make. The schema caps default risk at 5% for this reason.
 
-**Stop loss** — ⬜
+**Stop loss** — a predefined price level where you exit a losing trade automatically, set before entering the trade and not moved emotionally once in it.
 
-**R / R-multiple** — ⬜ Result expressed in units of *initial risk*. Risk $100, make $200 → +2R. Lose the planned amount → −1R.
+**R / R-multiple** — trade result expressed as a multiple of what you risked. Risk $100, lose it = −1R. Risk $100, make $300 = +3R. Lets you compare trades of different sizes fairly.
 *Why it's in the database (`trades.r_multiple`):* it makes trades comparable across account sizes and instruments, and it makes "did you follow your plan?" measurable. This is the number the product cares about, not dollars.
 
-**Risk-to-reward (RR)** — ⬜
+**Risk-to-reward (RR)** — ratio of what you're risking to what you're targeting. 1:3 RR means risking $100 to target $300. A good RR means you don't need to win most trades to be profitable.
 
-**Drawdown** — ⬜
+**Drawdown** — how much your account has fallen from its peak value. A 50% loss requires a 100% gain to recover — an asymmetry that makes big losses disproportionately damaging.
 
 ---
 
