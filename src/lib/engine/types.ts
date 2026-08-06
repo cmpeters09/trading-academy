@@ -152,3 +152,48 @@ export type StopFillResult =
       engineVersion: string;
     }
   | { ok: false; error: EngineError; engineVersion: string };
+
+// ---------------------------------------------------------------------------
+// Bracket exits + bar-path ambiguity (M-8 Session 3, ADR-007, RISKS R-3)
+// ---------------------------------------------------------------------------
+
+/**
+ * A stop-loss + take-profit pair around an open position. For `long`, the
+ * stop must be BELOW the target (protecting against price falling, aiming
+ * for it to rise); for `short`, the stop must be ABOVE the target. No
+ * `avgEntryPrice` here on purpose — Session 3 only resolves *which* exit
+ * (if any) a bar produces, not PnL. That's Session 4.
+ */
+export type BracketOrder = {
+  direction: "long" | "short";
+  quantity: QuantityUnits;
+  stopPrice: PriceUnits;
+  targetPrice: PriceUnits;
+};
+
+/**
+ * `resolutionAmbiguous` only ever appears on the `stop` outcome, never
+ * `target` — by construction, ambiguity (both levels touched in one bar)
+ * always resolves toward the stop (RISKS R-3), so a `target` result can
+ * only happen when the stop genuinely wasn't touched at all. The type
+ * reflects that invariant instead of carrying a field that's always false.
+ */
+export type BracketResult =
+  | { ok: true; outcome: "none"; engineVersion: string }
+  | {
+      ok: true;
+      outcome: "stop";
+      fillPrice: PriceUnits;
+      commission: MoneyUnits;
+      slippage: PriceUnits;
+      resolutionAmbiguous: boolean;
+      engineVersion: string;
+    }
+  | {
+      ok: true;
+      outcome: "target";
+      fillPrice: PriceUnits;
+      commission: MoneyUnits;
+      engineVersion: string;
+    }
+  | { ok: false; error: EngineError; engineVersion: string };
