@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { PRICE_SCALE, QUANTITY_SCALE, type MoneyUnits, type PriceUnits, type QuantityUnits } from "./types";
+import {
+  PRICE_SCALE,
+  QUANTITY_SCALE,
+  type MoneyUnits,
+  type PriceUnits,
+  type QuantityUnits,
+} from "./types";
 import {
   fromMoneyUnits,
   fromPriceUnits,

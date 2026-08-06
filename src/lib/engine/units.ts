@@ -1,4 +1,10 @@
-import { PRICE_SCALE, QUANTITY_SCALE, type MoneyUnits, type PriceUnits, type QuantityUnits } from "./types";
+import {
+  PRICE_SCALE,
+  QUANTITY_SCALE,
+  type MoneyUnits,
+  type PriceUnits,
+  type QuantityUnits,
+} from "./types";
 
 /**
  * The only place a decimal dollar amount is allowed to touch a rounding
@@ -47,15 +53,22 @@ export function fromMoneyUnits(units: MoneyUnits): number {
  * is round-half-away-from-zero in both directions, not a truncation
  * biased toward zero, so a loss doesn't get systematically under-counted.
  */
-export function priceQuantityToMoney(price: PriceUnits, quantity: QuantityUnits): MoneyUnits {
+export function priceQuantityToMoney(
+  price: PriceUnits,
+  quantity: QuantityUnits,
+): MoneyUnits {
   const divisor = BigInt(QUANTITY_SCALE);
   const half = divisor / BigInt(2);
   const product = BigInt(price) * BigInt(quantity);
   const zero = BigInt(0);
 
-  const rounded = product >= zero ? (product + half) / divisor : (product - half) / divisor;
+  const rounded =
+    product >= zero ? (product + half) / divisor : (product - half) / divisor;
 
-  if (rounded > BigInt(Number.MAX_SAFE_INTEGER) || rounded < BigInt(-Number.MAX_SAFE_INTEGER)) {
+  if (
+    rounded > BigInt(Number.MAX_SAFE_INTEGER) ||
+    rounded < BigInt(-Number.MAX_SAFE_INTEGER)
+  ) {
     // Programmer/impossible-state error (§7 class 3) — this app's realistic
     // position sizes never approach this. MUST throw, not return a typed
     // result: there's no sensible "domain" meaning for a position this
