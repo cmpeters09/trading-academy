@@ -56,6 +56,15 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Owner:** Christian
 - **Status:** open
 
+### TD-05 · Only daily ("1d") candles are seeded — intraday timeframes are empty
+- **Incurred:** M-3, 2026-08-05
+- **Why:** `supabase/scripts/import_yfinance.py` pulls only `1d` bars for the four starter instruments (ADR-006/ADR-016 starter set). The `candles` table's `timeframe` check constraint allows `1m`/`5m`/`15m`/`1h`/`4h`/`1d`/`1w`, and the `/chart` route's timeframe selector lists all seven, but only `1d` has any rows — intraday import and the curated "interesting event" dataset segments (ADR-006 §2: 2008, 2020 crash, earnings gaps) are explicitly out of scope for the PriceChart work this session.
+- **Risk if unpaid:** None correctness-wise — selecting an intraday timeframe renders PriceChart's existing empty state ("No candle data for this range."), not an error or a wrong number, which is the honest behavior §7/§23 require for missing data. The only cost is an unpolished first impression (a user picking "5 minute" sees nothing happen).
+- **Proposed fix:** Extend `import_yfinance.py` to also pull a recent intraday window per instrument (yfinance limits intraday history to ~60 days for sub-daily intervals) and/or curate the dataset segments ADR-006 describes. Roadmap already tracks this: M-3's "Seed initial dataset: ~20 instruments daily + 3 curated intraday segments" checklist item is still unchecked.
+- **Trigger to pay:** Before M-10 (Replay Engine) or M-16 (Pattern Recognition), both of which need real intraday bars to be useful. Not blocking for M-3 itself — the roadmap only requires the *component*, which already handles this data gap correctly.
+- **Owner:** Christian
+- **Status:** open
+
 ---
 
 ## Paid debt

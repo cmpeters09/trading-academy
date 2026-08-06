@@ -48,6 +48,14 @@
   --color-danger: var(--destructive);
   --color-success: var(--success);
 
+  /* Candle colors (PriceChart, ADR-004) — deliberately NOT --success/
+     --danger. This is a solo tool: skip the red/green win/loss convention
+     so a candle's color can't be misread as a verdict on the bar. Blue for
+     up, neutral for down; --chart-down aliases --foreground, which is
+     already near-black in light mode and near-white in dark mode. */
+  --color-chart-up: var(--chart-up);
+  --color-chart-down: var(--chart-down);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -90,6 +98,12 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+
+  /* blue-600-equivalent — 5.26:1 against white --card, 3.77:1 against
+     --chart-down (near-black). Contrast verified with the WCAG relative-
+     luminance formula converted from oklch, not eyeballed. */
+  --chart-up: oklch(0.546 0.245 262.881);
+  --chart-down: var(--foreground);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -126,6 +140,12 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+
+  /* blue-500-equivalent — lighter than the light-mode blue so it still
+     clears 3:1 against the dark --card (4.76:1) and stays 3.60:1 apart
+     from --chart-down (near-white) instead of washing out next to it. */
+  --chart-up: oklch(0.623 0.214 259.815);
+  --chart-down: var(--foreground);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
