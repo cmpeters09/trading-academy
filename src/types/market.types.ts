@@ -15,3 +15,10 @@ export type Candle = {
   close: number;
   volume: number;
 };
+
+export type Instrument = {
+  id: string;
+  symbol: string;
+  name: string;
+  assetClass: string;
+};
