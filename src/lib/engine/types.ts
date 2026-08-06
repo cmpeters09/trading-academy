@@ -105,3 +105,50 @@ export type MarketFillResult =
       engineVersion: string;
     }
   | { ok: false; error: EngineError; engineVersion: string };
+
+// ---------------------------------------------------------------------------
+// Limit/stop entry fills (M-8 Session 2, ADR-007 "fill on candle range touch")
+// ---------------------------------------------------------------------------
+
+/**
+ * A limit order fills at EXACTLY its limit price, never better (see
+ * limit-fill.ts's module doc for why) — so, unlike a stop, there is no
+ * `slippage` field on a filled result. It genuinely doesn't apply.
+ */
+export type LimitFillResult =
+  | {
+      ok: true;
+      status: "filled";
+      fillPrice: PriceUnits;
+      commission: MoneyUnits;
+      engineVersion: string;
+    }
+  | {
+      ok: true;
+      status: "unfilled";
+      reason: "limit_not_touched";
+      engineVersion: string;
+    }
+  | { ok: false; error: EngineError; engineVersion: string };
+
+/**
+ * A triggered stop fills like a market order — stop price adjusted by
+ * slippage, same as fillMarketOrder — so this result shape does carry
+ * `slippage`, unlike LimitFillResult.
+ */
+export type StopFillResult =
+  | {
+      ok: true;
+      status: "filled";
+      fillPrice: PriceUnits;
+      commission: MoneyUnits;
+      slippage: PriceUnits;
+      engineVersion: string;
+    }
+  | {
+      ok: true;
+      status: "unfilled";
+      reason: "stop_not_touched";
+      engineVersion: string;
+    }
+  | { ok: false; error: EngineError; engineVersion: string };
