@@ -197,3 +197,47 @@ export type BracketResult =
       engineVersion: string;
     }
   | { ok: false; error: EngineError; engineVersion: string };
+
+// ---------------------------------------------------------------------------
+// Position close: realized PnL + R-multiple (M-8 Session 4)
+// ---------------------------------------------------------------------------
+
+/**
+ * A completed round-trip: an entry fill and an exit fill for the same
+ * quantity. `entryCommission`/`exitCommission` are the ACTUAL amounts
+ * already charged at each fill (from a MarketFillResult/LimitFillResult/
+ * StopFillResult/BracketResult's own `commission` field) — this function
+ * sums what already happened, it doesn't re-derive commission from a
+ * config.
+ *
+ * `plannedStopPrice` is optional and deliberately NOT re-validated against
+ * whatever bracket the position may have had — by the time you're closing
+ * a position, the stop is a fixed fact about how the trade was planned,
+ * not something this function re-derives.
+ */
+export type ClosedPosition = {
+  direction: "long" | "short";
+  quantity: QuantityUnits;
+  entryFillPrice: PriceUnits;
+  entryCommission: MoneyUnits;
+  exitFillPrice: PriceUnits;
+  exitCommission: MoneyUnits;
+  plannedStopPrice?: PriceUnits;
+};
+
+/**
+ * `rMultiple` is `null`, not 0 or omitted, when `plannedStopPrice` was
+ * never set — there is no risk to measure a multiple against, and a trade
+ * with no stop is meant to be flaggable regardless of PnL (Rule 3,
+ * DATABASE_SCHEMA.md's `trades.r_multiple` comment).
+ */
+export type ClosedPositionResult =
+  | {
+      ok: true;
+      grossPnl: MoneyUnits;
+      fees: MoneyUnits;
+      netPnl: MoneyUnits;
+      rMultiple: number | null;
+      engineVersion: string;
+    }
+  | { ok: false; error: EngineError; engineVersion: string };
