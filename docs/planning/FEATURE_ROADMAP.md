@@ -64,9 +64,9 @@ Status Key: ⬜ Not Started · 🟨 In Progress · ✅ Complete
 # Phase 3 — Trading Simulator
 
 ## M-8 Simulator Fill Engine — depends on: M-3 · ∥ can run parallel with M-6
-- ⬜ Pure TS engine: market/limit/stop fills, slippage, commission, partial fills
-- ⬜ Bar-path ambiguity rule: resolve against the trader + flag (RISKS R-3)
-- ⬜ ~100% branch coverage with hand-computed cases (ADR-010); `engine_version` tagging
+- ✅ Pure TS engine: market/limit/stop fills, slippage, commission, partial fills (`/lib/engine`, ADR-013/014; "partial fills" = multiple orders closing one position over time, not intra-bar quantity — see engine README's Known Limitations)
+- ✅ Bar-path ambiguity rule: resolve against the trader + flag (RISKS R-3) — `resolveBracket()`
+- ✅ ~100% branch coverage with hand-computed cases (ADR-010); `engine_version` tagging — 51/51 tests, 100% branches/statements/functions/lines
 
 ## M-10 Replay Engine — depends on: M-3
 - ⬜ Candle-by-candle playback state machine, pause, speed, multi-timeframe

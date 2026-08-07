@@ -2,14 +2,14 @@
 
 # Trading Academy — Progress Tracker
 
-Last updated: 2026-08-06
+Last updated: 2026-08-06 (M-8 complete)
 
 ---
 
 ## Headline numbers
 
-**MLP: 39%**
-**Full Vision: 23%**
+**MLP: 59%**
+**Full Vision: 34%**
 
 - **MLP** — the minimum lovable product: accounts → data → chart → simulator → journal → stats. The smallest slice of the app that's actually usable end to end, skipping lessons, gamification, and the AI coach.
 - **Full Vision** — all 20 milestones (M-1 through M-20), the whole roadmap in `docs/planning/FEATURE_ROADMAP.md`.
@@ -28,7 +28,7 @@ Both are **weighted by rough effort in ~1–2hr sessions, not by milestone count
 | M-3 (chart) | Shared `<PriceChart>` component + `/chart` route | 3 | ✅ | Done |
 | M-4/5 | Dashboard v1 + XP ledger | 5 | — | Not started |
 | M-6/7 | Lesson engine + knowledge checks | 7 | — | Not started |
-| M-8 | Simulator fill engine | 8 | ✅ | Not started |
+| M-8 | Simulator fill engine | 8 | ✅ | Done |
 | M-9/10/11 | Simulator UI + replay engine + trade persistence | 10 | ✅ | Not started |
 | M-12/13 | Journal + stats/analytics | 7 | ✅ | Not started |
 | M-14→20 | Coach, gamification, and the remaining milestones | 18 | — | Not started |
@@ -41,9 +41,9 @@ Both are **weighted by rough effort in ~1–2hr sessions, not by milestone count
 ## How the headline numbers are computed
 
 - **MLP %** = (weight of `Done` rows where `In MLP` = ✅) / (weight of all rows where `In MLP` = ✅)
-  Currently: `16 / 41 ≈ 39%`
+  Currently: `24 / 41 ≈ 59%`
 - **Full Vision %** = (weight of all `Done` rows) / (weight of all rows)
-  Currently: `16 / 71 ≈ 23%`
+  Currently: `24 / 71 ≈ 34%`
 
 ---
 
