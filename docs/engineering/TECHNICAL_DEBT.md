@@ -37,15 +37,6 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Owner:** Christian
 - **Status:** open
 
-### TD-02 · ADR-013/014/015 referenced but never written
-- **Incurred:** M-1, 2026-07-13
-- **Why:** DOC_CONSISTENCY_REVIEW.md called for three ADRs before M-1 (ADR-013 engine location, ADR-014 numeric precision, ADR-015 env/secrets). ENGINEERING_PRINCIPLES.md §3.1 already describes ADR-013's resolution as settled, citing it as if it exists. None were written; ADR-016 was written and numbered past the gap.
-- **Risk if unpaid:** Non-obvious domain rules (engine location, money arithmetic, secrets handling) cite ADRs that don't exist — a citation to nothing, which ENGINEERING_PRINCIPLES §15 calls worse than no citation.
-- **Proposed fix:** Write ADR-013 (supersedes ADR-007, location only), ADR-014, and ADR-015 — each a short transcription of decisions already made in ENGINEERING_PRINCIPLES.md into immutable ADR form. ~30 min each.
-- **Trigger to pay:** ADR-013 and ADR-014 before M-8 (simulator engine); ADR-015 before Supabase is wired (later this milestone).
-- **Owner:** Christian
-- **Status:** partially paid — ADR-015 written M-1 Session 4, 2026-07-14, before Supabase wiring per the original trigger. ADR-013 and ADR-014 remain outstanding; still open until M-8.
-
 ### TD-04 · Email confirmation disabled for local development
 - **Incurred:** M-2, 2026-07-15
 - **Why:** Editing Supabase's email templates (needed so the confirmation/recovery links point at `/auth/confirm` with `token_hash`/`type`, per PR #5) is now gated behind configuring custom SMTP, which isn't set up yet. Rather than block the auth-UI PR on standing up SMTP, "Confirm email" was disabled in Authentication -> Email Provider settings for the dev phase — signups now get an active session immediately, with no `/auth/confirm` round trip.
@@ -68,6 +59,15 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 ---
 
 ## Paid debt
+
+### TD-02 · ADR-013/014/015 referenced but never written
+- **Incurred:** M-1, 2026-07-13
+- **Why:** DOC_CONSISTENCY_REVIEW.md called for three ADRs before M-1 (ADR-013 engine location, ADR-014 numeric precision, ADR-015 env/secrets). ENGINEERING_PRINCIPLES.md §3.1 already describes ADR-013's resolution as settled, citing it as if it exists. None were written; ADR-016 was written and numbered past the gap.
+- **Risk if unpaid:** Non-obvious domain rules (engine location, money arithmetic, secrets handling) cite ADRs that don't exist — a citation to nothing, which ENGINEERING_PRINCIPLES §15 calls worse than no citation.
+- **Proposed fix:** Write ADR-013 (supersedes ADR-007, location only), ADR-014, and ADR-015 — each a short transcription of decisions already made in ENGINEERING_PRINCIPLES.md into immutable ADR form. ~30 min each.
+- **Trigger to pay:** ADR-013 and ADR-014 before M-8 (simulator engine); ADR-015 before Supabase is wired (later this milestone).
+- **Owner:** Christian
+- **Status:** paid — ADR-015 written M-1 Session 4, 2026-07-14, before Supabase wiring per the original trigger. ADR-013 and ADR-014 written M-8 Session 0, 2026-08-05, before any engine code, per the original trigger.
 
 ### TD-03 · Scaffold dependencies use `^` ranges instead of exact pins
 - **Incurred:** M-1, 2026-07-13

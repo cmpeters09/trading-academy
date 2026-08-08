@@ -1,6 +1,11 @@
 # ADR-007: Simulator Execution — Client-Side Engine, Server-Side Persistence & Validation
 
 **Status:** Accepted · **Date:** 2026-07-12
+**Partially superseded by ADR-013** (2026-08-05) — engine *location* only.
+The "Decision" section below still says `features/simulator/engine/`; the
+engine actually lives at `/lib/engine` per ADR-013. Execution model, fill
+rules, and server re-validation approach are unchanged and still governed by
+this ADR.
 
 ## Context
 Undecided whether order fills/PnL are computed on the client (responsive, cheatable) or server (authoritative, slower). Matters for replay speed and future leaderboards.
