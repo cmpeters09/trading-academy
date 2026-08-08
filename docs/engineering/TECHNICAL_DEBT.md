@@ -56,6 +56,15 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Owner:** Christian
 - **Status:** open
 
+### TD-06 · `replay_sessions` (resumable sessions) deferred until M-9 exists
+- **Incurred:** M-10, 2026-08-07
+- **Why:** DATABASE_SCHEMA.md's `replay_sessions` table has a required (`not null`) FK to `sim_accounts`, which is M-9 (Simulator UI) scope. The roadmap has M-9 depending on M-10, not the other way around, so `sim_accounts` doesn't exist yet when M-10 is built — there's nothing valid to put in that column. Rather than invent a placeholder `sim_accounts` table or make the FK nullable (both real schema decisions, not something to decide silently mid-session), M-10 Session 4 (persistence) is deferred entirely.
+- **Risk if unpaid:** None while unpaid — replay simply isn't resumable yet (a session's progress is lost on refresh/navigation). No wrong data, no broken invariant, just a feature gap that was scoped out on purpose.
+- **Proposed fix:** Once M-9 creates `sim_accounts`, write the `replay_sessions` migration + RLS (ADR-012, same migration) and the M-10 Session 4 service/route work (segment/instrument/timeframe, `cursor_ts` persisted on pause, resume by converting the stored timestamp back into a cursor via `features/replay/engine`'s lookup). ~1 session.
+- **Trigger to pay:** After M-9 ships `sim_accounts`. Not blocking M-10 itself — the roadmap's M-10 checklist item is "candle-by-candle playback," which Sessions 1–3 deliver fully; "resumable sessions" is the one checklist line this debt covers.
+- **Owner:** Christian
+- **Status:** open
+
 ---
 
 ## Paid debt

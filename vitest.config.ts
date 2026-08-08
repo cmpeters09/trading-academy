@@ -32,6 +32,12 @@ export default defineConfig({
           functions: 100,
           lines: 100,
         },
+        "src/features/replay/engine/**": {
+          branches: 100,
+          statements: 100,
+          functions: 100,
+          lines: 100,
+        },
       },
     },
   },
