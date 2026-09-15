@@ -61,13 +61,32 @@ export function ReplayChart({
     [candles, cursor],
   );
 
+  // `candles.length === 0` (a genuine empty fetch) and `cursor === null`
+  // (a real fetch, but the session hasn't started — cursor.ts's documented
+  // "zero bars revealed" state) both produce an empty `revealed` array.
+  // PriceChart's own empty state ("No candle data for this range") is
+  // correct for the first case but misleading for the second — it reads
+  // as a data problem when there isn't one. Distinguish them here, in the
+  // feature, rather than teaching PriceChart (feature-agnostic, §16) about
+  // replay's cursor concept.
+  const notStartedYet = candles.length > 0 && cursor === null;
+
   return (
     <div className="flex flex-col gap-4">
-      <PriceChart
-        candles={revealed}
-        instrumentLabel={instrumentLabel}
-        timeframeLabel={timeframeLabel}
-      />
+      {notStartedYet ? (
+        <div
+          className="bg-surface border-border text-muted-foreground flex h-[400px] w-full items-center justify-center rounded-md border text-sm"
+          role="status"
+        >
+          Nothing revealed yet — press Play or step forward to begin.
+        </div>
+      ) : (
+        <PriceChart
+          candles={revealed}
+          instrumentLabel={instrumentLabel}
+          timeframeLabel={timeframeLabel}
+        />
+      )}
       <ReplayControls candles={candles} />
     </div>
   );
