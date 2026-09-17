@@ -4,18 +4,13 @@ import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import type { Candle } from "@/types/market.types";
 
 import { isAtEnd, isAtStart } from "../engine/cursor";
 import { useReplayStore } from "../store";
 
 const SPEED_OPTIONS = [1, 2, 4, 8] as const;
-
-// Matches the /chart route's native <select> styling (ENGINEERING_PRINCIPLES
-// §16 rule of three — this is the second use, so it's copied, not promoted
-// to a shared component yet).
-const selectClassName =
-  "border-input bg-surface text-foreground h-8 rounded-lg border px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 [&>option]:bg-surface [&>option]:text-foreground";
 
 type ReplayControlsProps = {
   candles: Candle[];
@@ -85,9 +80,8 @@ export function ReplayControls({ candles }: ReplayControlsProps) {
 
       <div className="flex items-center gap-1.5">
         <Label htmlFor="replay-speed">Speed</Label>
-        <select
+        <Select
           id="replay-speed"
-          className={selectClassName}
           value={speed}
           disabled={!hasCandles}
           onChange={(event) => setSpeed(Number(event.target.value))}
@@ -97,7 +91,7 @@ export function ReplayControls({ candles }: ReplayControlsProps) {
               {option}×
             </option>
           ))}
-        </select>
+        </Select>
       </div>
     </div>
   );
