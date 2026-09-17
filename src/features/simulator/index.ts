@@ -1,3 +1,6 @@
+export { OrderTicket } from "./components/OrderTicket";
+export { orderTicketSchema } from "./lib/order-ticket-schema";
+export type { OrderTicketSubmission } from "./lib/order-ticket-schema";
 export {
   addToPosition,
   fullyClosePosition,
