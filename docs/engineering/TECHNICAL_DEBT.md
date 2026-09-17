@@ -62,6 +62,16 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Risk if unpaid:** None while unpaid — replay simply isn't resumable yet (a session's progress is lost on refresh/navigation). No wrong data, no broken invariant, just a feature gap that was scoped out on purpose.
 - **Proposed fix:** Once M-9 creates `sim_accounts`, write the `replay_sessions` migration + RLS (ADR-012, same migration) and the M-10 Session 4 service/route work (segment/instrument/timeframe, `cursor_ts` persisted on pause, resume by converting the stored timestamp back into a cursor via `features/replay/engine`'s lookup). ~1 session.
 - **Trigger to pay:** After M-9 ships `sim_accounts`. Not blocking M-10 itself — the roadmap's M-10 checklist item is "candle-by-candle playback," which Sessions 1–3 deliver fully; "resumable sessions" is the one checklist line this debt covers.
+- **Update, M-9 Session 1, 2026-09-17:** `sim_accounts` now exists (`20260917090000_create_sim_accounts.sql`) — the FK blocker described above is cleared. `replay_sessions` itself is still **not** built; that migration is deliberately left for its own session (not bundled into M-9 Session 1, which is scoped to account/order/position state only). Status stays `open` until `replay_sessions` actually ships.
+- **Owner:** Christian
+- **Status:** open
+
+### TD-07 · `sim_accounts` has no `updated_at` despite `balance` mutating on every trade
+- **Incurred:** M-9 Session 1, 2026-09-17
+- **Why:** DATABASE_SCHEMA.md §4's `sim_accounts` SQL block (the literal spec this migration replicates) only lists `created_at`, even though the doc's own top-level conventions note says "`created_at`/`updated_at` on every table." `orders` has the same gap in the doc; `executions` has neither column. Rather than silently add a column the schema doc doesn't show, or silently match the doc's gap without flagging it (CLAUDE.md: "Never fix a doc gap silently — log it or ask"), the migration was written to match the documented SQL exactly and the inconsistency is logged here instead.
+- **Risk if unpaid:** `balance` changes on every fill/trade close (M-9 Sessions 2+, M-11), but nothing records *when* the most recent change happened — no auditability for "why is this balance what it is right now," and no cheap way to sort/debug accounts by recent activity without scanning `orders`/`trades`.
+- **Proposed fix:** A small follow-up migration adding `updated_at timestamptz not null default now()` to `sim_accounts` (and, while there, `orders`) plus a trigger to bump it on update — same pattern as `profiles`/`user_settings`. ~15 min. Decide at the same time whether DATABASE_SCHEMA.md's shown SQL should be corrected to match (doc fix, not a silent one).
+- **Trigger to pay:** Before M-9 Session 2 starts writing balance-mutating logic (order fills against a `sim_account`), so the gap doesn't widen further before it's addressed.
 - **Owner:** Christian
 - **Status:** open
 
