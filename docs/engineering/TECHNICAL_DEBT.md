@@ -75,6 +75,15 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Owner:** Christian
 - **Status:** open
 
+### TD-08 · `addToPosition` doesn't re-validate a carried-over stop/target against the new weighted-average entry price
+- **Incurred:** M-9 Session 1, 2026-09-17
+- **Why:** `features/simulator/lib/position.ts`'s `addToPosition` recomputes the position's weighted-average entry price (`position-math.ts`) but carries the existing `plannedStopPrice`/`plannedTargetPrice` over unchanged. An add-to can move the average entry price past a stop that was valid when the position opened (e.g. adding to a long at a much lower price can leave the stop above the new entry). Deciding the product behavior (reject the add? clear the stop? require the caller to supply a new one?) is a real product decision, not something to guess mid-session — so `addToPosition` stays permissive and the now-invalid stop surfaces later, as the engine's own `INVALID_STOP`, the next time the position is closed.
+- **Risk if unpaid:** A position can sit open with a stop/target that no longer makes sense for its current entry price, discovered only when `partiallyClosePosition`/`fullyClosePosition` rejects the close with `INVALID_STOP` — surfaced late, not at the moment the add happens. Covered by explicit tests (`position.test.ts`'s "bubbles the engine's INVALID_STOP" cases) so the behavior is at least correct and visible, not silently wrong.
+- **Proposed fix:** Decide the product rule (likely: reject an add that would invalidate the carried-over stop, forcing the caller to clear/replace it first) and implement it in `addToPosition`, with new hand-computed tests for the rejection. ~1-2h once the product decision is made.
+- **Trigger to pay:** Before Session 2+ builds the order ticket UI that calls `addToPosition` against live fills — a UI needs a real answer here, not a bubbled engine error from a later close.
+- **Owner:** Christian
+- **Status:** open
+
 ---
 
 ## Paid debt
