@@ -42,22 +42,27 @@ const directionOptionClassName =
 
 type OrderTicketProps = {
   /**
-   * Session 2 scope ends at producing a validated order -- this prop is how
-   * a later session (fills, persistence) hooks in. Left unset, the ticket
-   * just logs the captured order and shows it on-screen (§8 structured log,
-   * not a `console.log`).
+   * Session 3 (`PositionPanel`) passes this to hand a captured order to
+   * `useSimulatorStore`'s `submitOrder` -- once provided, the CALLER owns
+   * showing what happened to it (a pending/open/closed readout), so this
+   * component's own `CapturedOrderSummary` is skipped; see below. Left
+   * unset (e.g. this component used standalone), the ticket falls back to
+   * logging the captured order and showing it on-screen itself (§8
+   * structured log, not a `console.log`).
    */
   onSubmit?: (order: OrderTicketSubmission) => void;
 };
 
 /**
- * The paper-trading order-entry panel (M-9 Session 2). Captures direction,
- * quantity, order type, and optional planned stop/target -- validates with
- * `orderTicketSchema` (React Hook Form + Zod, ADR-005: this is form state,
- * not a Zustand store, since nothing else reads it yet) -- and on submit
- * produces a typed `OrderTicketSubmission` in the engine's own branded
- * units. It does NOT fill the order, touch `/lib/engine`, or persist
- * anything; that's Session 3.
+ * The paper-trading order-entry panel (M-9 Session 2, wired to the engine
+ * in Session 3). Captures direction, quantity, order type, and optional
+ * planned stop/target -- validates with `orderTicketSchema` (React Hook
+ * Form + Zod, ADR-005: this is form state, not a Zustand store) -- and on
+ * submit produces a typed `OrderTicketSubmission` in the engine's own
+ * branded units. Filling the order, touching `/lib/engine`, and updating
+ * position state all happen one level up, in whatever `onSubmit` does
+ * (`PositionPanel` -> `useSimulatorStore.submitOrder`) -- this component's
+ * job ends at producing a validated order.
  */
 export function OrderTicket({ onSubmit }: OrderTicketProps) {
   const [capturedOrder, setCapturedOrder] = useState<OrderTicketSubmission | null>(null);
@@ -80,10 +85,10 @@ export function OrderTicket({ onSubmit }: OrderTicketProps) {
 
   const onValid = handleSubmit((validated) => {
     const order = toOrderTicketSubmission(validated);
-    setCapturedOrder(order);
     if (onSubmit) {
       onSubmit(order);
     } else {
+      setCapturedOrder(order);
       logger.info("order_ticket_captured", { ...order });
     }
   });

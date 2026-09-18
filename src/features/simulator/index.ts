@@ -1,4 +1,5 @@
 export { OrderTicket } from "./components/OrderTicket";
+export { ReplaySimulator } from "./components/ReplaySimulator";
 export { orderTicketSchema } from "./lib/order-ticket-schema";
 export type { OrderTicketSubmission } from "./lib/order-ticket-schema";
 export {
@@ -19,3 +20,5 @@ export type {
   PositionError,
   PositionFill,
 } from "./lib/types";
+export { useSimulatorStore } from "./store";
+export type { SimulatorStore } from "./store";

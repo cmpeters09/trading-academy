@@ -1,7 +1,7 @@
-import { ReplayChart } from "@/features/replay";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { ReplaySimulator } from "@/features/simulator";
 import { getCandles, getInstrumentBySymbol } from "@/services/market-data/candles";
 
 // Same starter set as /chart (ADR-016) — not a general instrument search.
@@ -75,7 +75,7 @@ export default async function ReplayPage({
         </form>
       </div>
 
-      <ReplayChart
+      <ReplaySimulator
         candles={candles}
         instrumentLabel={instrument.symbol}
         timeframeLabel={TIMEFRAME_LABEL}
