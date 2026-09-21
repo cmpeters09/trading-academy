@@ -4,34 +4,59 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { fromMoneyUnits, fromPriceUnits, fromQuantityUnits } from "@/lib/engine/units";
 
 import { OrderTicket } from "./OrderTicket";
+import { computeUnrealizedPnl } from "../lib/unrealized-pnl";
 import { useSimulatorStore } from "../store";
+
+/** `+$50.00`/`-$30.00` -- sign BEFORE the currency symbol, never doubled with toFixed's own "-". */
+function signedCurrency(value: number): string {
+  return `${value < 0 ? "-" : "+"}$${Math.abs(value).toFixed(2)}`;
+}
+
+/** `+1.50R`/`-0.60R`. */
+function signedR(value: number): string {
+  return `${value < 0 ? "-" : "+"}${Math.abs(value).toFixed(2)}R`;
+}
+
+/** Green for profit, red (danger) for loss, default text for exactly zero -- paired with the +/- sign above, never color alone (§11). */
+function pnlColorClass(value: number): string {
+  if (value > 0) return "text-success";
+  if (value < 0) return "text-danger";
+  return "";
+}
 
 /**
  * The simulator's other half of the order-ticket flow (M-9 Session 3):
  * shows exactly one of four states, switching automatically as
  * `useSimulatorStore` changes --
  *
- * 1. **Open position** -- direction, quantity, avg entry, and the bracket
- *    if one was set. The ticket is hidden; this session doesn't support
- *    adding to or manually closing a position from here (README: known
- *    limitation).
+ * 1. **Open position** -- direction, quantity, avg entry, the bracket if
+ *    one was set, and unrealized PnL/R (Session 4) marked against the
+ *    latest revealed bar's close (`lastPrice`) -- gross, labeled "before
+ *    exit costs" (Q3: no exit commission has actually been paid yet). The
+ *    ticket is hidden; this session doesn't support adding to or manually
+ *    closing a position from here (README: known limitation).
  * 2. **Order pending** -- submitted, waiting for the next revealed bar.
  *    The ticket is hidden so a second order can't be queued behind it.
  * 3. **Flat** -- the ticket is shown so a new order can be placed,
  *    alongside the last closed trade's result and/or a rejected-order
  *    error, if either happened last cycle (§7: inline, not a toast).
- *
- * Session 4 adds full P&L/R display and the risk-% sizing helper; this is
- * deliberately minimal -- just enough to SEE a fill and a close happen.
  */
 export function PositionPanel() {
   const pendingOrder = useSimulatorStore((state) => state.pendingOrder);
   const position = useSimulatorStore((state) => state.position);
+  const lastPrice = useSimulatorStore((state) => state.lastPrice);
   const lastClosedTrade = useSimulatorStore((state) => state.lastClosedTrade);
   const orderError = useSimulatorStore((state) => state.orderError);
   const submitOrder = useSimulatorStore((state) => state.submitOrder);
 
   if (position) {
+    // lastPrice is only ever null before the first bar reveals -- and a
+    // position can't exist yet at that point (it's created inside the
+    // same onBarRevealed update that sets lastPrice), so this is
+    // defensive, not a real "position with no mark price" state.
+    const unrealized = lastPrice !== null ? computeUnrealizedPnl(position, lastPrice) : null;
+    const unrealizedPnl = unrealized ? fromMoneyUnits(unrealized.grossPnl) : null;
+
     return (
       <Card>
         <CardHeader>
@@ -56,6 +81,20 @@ export function PositionPanel() {
               <>
                 <dt className="text-muted-foreground">Target</dt>
                 <dd>${fromPriceUnits(position.plannedTargetPrice).toFixed(2)}</dd>
+              </>
+            ) : null}
+            {unrealizedPnl !== null ? (
+              <>
+                <dt className="text-muted-foreground">Unrealized PnL (before exit costs)</dt>
+                <dd className={pnlColorClass(unrealizedPnl)}>{signedCurrency(unrealizedPnl)}</dd>
+              </>
+            ) : null}
+            {unrealized?.rMultiple != null ? (
+              <>
+                <dt className="text-muted-foreground">Unrealized R</dt>
+                <dd className={pnlColorClass(unrealized.rMultiple)}>
+                  {signedR(unrealized.rMultiple)}
+                </dd>
               </>
             ) : null}
           </dl>

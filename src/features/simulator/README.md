@@ -14,9 +14,11 @@ account/order/position *state logic*. Session 2 added the order-entry
 panel. Session 3 wired order → engine → position end to end. Session 4,
 sub-session A: a risk-% position-sizing helper (`/lib/engine`'s
 `computePositionSize`) wired into `OrderTicket` as an optional "size by
-risk" section that live-fills `quantity`. Still to come this session:
-fuller P&L/R display (B), TD-10's manual close + single-bracket-leg exit
-(C), and close-out (D). Still no persistence to the DB.
+risk" section that live-fills `quantity`. Sub-session B: the open-position
+readout now shows unrealized PnL/R, marked to the latest revealed bar and
+updating live as replay advances. Still to come this session: TD-10's
+manual close + single-bracket-leg exit (C), and close-out (D). Still no
+persistence to the DB.
 
 ## Architecture
 
@@ -107,16 +109,33 @@ fuller P&L/R display (B), TD-10's manual close + single-bracket-leg exit
   order, and a no-outcome check is idempotent — verified both by unit test
   and live in a browser (step back after a fill, step forward again, the
   position doesn't change).
-- **`store.ts`** (Session 3) — `useSimulatorStore` (ADR-005: ephemeral
-  client state, one store per feature). Holds `pendingOrder` / `position`
-  / `lastClosedTrade` / `orderError`; `submitOrder` and `onBarRevealed` are
-  thin delegates to Session 1's reducer and `process-bar.ts` — all the
-  actual logic lives in `lib/`, same split as `features/replay/store.ts`.
-- **`components/PositionPanel.tsx`** (Session 3) — switches between the
-  order ticket (flat), a "pending, waiting for the next bar" status, and
-  the open-position readout (direction, quantity, avg entry, bracket if
-  set), plus an inline rejected-order error or last-closed-trade summary
-  next to the ticket (§7: inline, never a toast).
+- **`store.ts`** (Session 3, `lastPrice` added Session 4) —
+  `useSimulatorStore` (ADR-005: ephemeral client state, one store per
+  feature). Holds `pendingOrder` / `position` / `lastClosedTrade` /
+  `orderError` / `lastPrice`; `submitOrder` and `onBarRevealed` are thin
+  delegates to Session 1's reducer and `process-bar.ts` — all the actual
+  logic lives in `lib/`, same split as `features/replay/store.ts`.
+  `lastPrice` is set to every revealed bar's close, independent of
+  whether that bar caused a fill — it's the mark price `PositionPanel`
+  uses for unrealized PnL/R.
+- **`lib/unrealized-pnl.ts`** (Session 4) — `computeUnrealizedPnl`. Same
+  gross-PnL formula as Session 1's `closePosition` (`priceQuantityToMoney`
+  on the price delta, reused, never re-derived), marked against
+  `lastPrice` instead of a real exit fill, with NO commission subtracted
+  — nothing has actually been paid to exit yet. Deliberately GROSS, not
+  net (Q3 in this session's plan) — `PositionPanel` labels it "before exit
+  costs" rather than show a number that quietly assumes a guessed exit
+  fee. `rMultiple` is `null` both when there's no planned stop AND when
+  one sits on the wrong side of entry (TD-08's reachable gap) — display
+  math stays honest rather than showing a nonsensical ratio.
+- **`components/PositionPanel.tsx`** (Session 3, unrealized PnL/R added
+  Session 4) — switches between the order ticket (flat), a "pending,
+  waiting for the next bar" status, and the open-position readout
+  (direction, quantity, avg entry, bracket if set, and unrealized PnL/R
+  once a mark price exists), plus an inline rejected-order error or
+  last-closed-trade summary next to the ticket (§7: inline, never a
+  toast). Unrealized PnL/R is colored (`text-success`/`text-danger`) but
+  always paired with an explicit `+`/`-` sign, never color alone (§11).
 - **`components/ReplaySimulator.tsx`** (Session 3) — mounts `PositionPanel`
   next to replay's `ReplayChart`, wiring `onBarRevealed` (M-10's
   mechanism) straight to `useSimulatorStore`. Lives here, not in
@@ -186,14 +205,10 @@ fullyClosePosition(input: ClosePositionInput) -> FullCloseResult
   the existing four, with its own input/result types in `lib/types.ts` and
   hand-computed tests in `lib/position.test.ts`, same pattern.
 - **TD-10 (manual close / single-leg bracket):** the natural next increment
-  on top of Session 3's wiring — a "Close position" action in
+  on top of this session's wiring — a "Close position" action in
   `PositionPanel`, and a product decision on whether a stop-only or
-  target-only position should auto-exit. In progress this session
+  target-only position should auto-exit. Next up this session
   (sub-session C).
-- **Fuller P&L/R display (Session 4, sub-session B):** `PositionPanel`'s
-  open-position readout doesn't show unrealized PnL/R yet — reuse the
-  engine's own numbers (a `priceQuantityToMoney` call against the current
-  bar's price), don't recompute from scratch.
 
 ## Known limitations
 

@@ -31,16 +31,18 @@ beforeEach(() => {
     position: null,
     lastClosedTrade: null,
     orderError: null,
+    lastPrice: null,
   });
 });
 
 describe("useSimulatorStore -- initial state", () => {
-  it("starts flat, with nothing pending and no history", () => {
+  it("starts flat, with nothing pending, no history, and no mark price", () => {
     const state = useSimulatorStore.getState();
     expect(state.pendingOrder).toBeNull();
     expect(state.position).toBeNull();
     expect(state.lastClosedTrade).toBeNull();
     expect(state.orderError).toBeNull();
+    expect(state.lastPrice).toBeNull();
   });
 });
 
@@ -87,6 +89,14 @@ describe("useSimulatorStore -- onBarRevealed delegates to the pure processBar", 
     expect(state.position?.quantity).toBe(toQuantityUnits(1));
   });
 
+  it("tracks lastPrice as the revealed bar's close, on every reveal (not just a fill)", () => {
+    useSimulatorStore.getState().onBarRevealed(bar({ close: toPriceUnits(101.5) }));
+    expect(useSimulatorStore.getState().lastPrice).toBe(toPriceUnits(101.5));
+
+    useSimulatorStore.getState().onBarRevealed(bar({ close: toPriceUnits(102.25) }));
+    expect(useSimulatorStore.getState().lastPrice).toBe(toPriceUnits(102.25));
+  });
+
   it("a rejected fill surfaces orderError and clears both pendingOrder and position", () => {
     useSimulatorStore.getState().submitOrder({ ...MARKET_ORDER, quantity: toQuantityUnits(0) });
 
@@ -111,5 +121,6 @@ describe("useSimulatorStore -- reset", () => {
     expect(state.position).toBeNull();
     expect(state.lastClosedTrade).toBeNull();
     expect(state.orderError).toBeNull();
+    expect(state.lastPrice).toBeNull();
   });
 });

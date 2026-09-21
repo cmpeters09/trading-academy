@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { EngineBar, EngineError } from "@/lib/engine/types";
+import type { EngineBar, EngineError, PriceUnits } from "@/lib/engine/types";
 
 import { DEFAULT_ENGINE_CONFIG } from "./lib/engine-config";
 import type { OrderTicketSubmission } from "./lib/order-ticket-schema";
@@ -12,6 +12,8 @@ type SimulatorStoreState = {
   position: OpenPosition | null;
   lastClosedTrade: ClosedTrade | null;
   orderError: EngineError | null;
+  /** The most recently revealed bar's close -- the mark price `PositionPanel` uses for unrealized PnL/R (Session 4). `null` until the first bar reveals. */
+  lastPrice: PriceUnits | null;
 };
 
 type SimulatorStoreActions = {
@@ -29,6 +31,7 @@ const INITIAL_STATE: SimulatorStoreState = {
   position: null,
   lastClosedTrade: null,
   orderError: null,
+  lastPrice: null,
 };
 
 /**
@@ -58,6 +61,7 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
     set({
       pendingOrder: result.pendingOrder,
       position: result.position,
+      lastPrice: bar.close,
       ...(result.closedTrade ? { lastClosedTrade: result.closedTrade } : {}),
       ...(result.error ? { orderError: result.error } : {}),
     });
