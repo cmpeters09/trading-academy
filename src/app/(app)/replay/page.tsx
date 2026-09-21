@@ -1,6 +1,7 @@
-import { ReplayChart } from "@/features/replay";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { ReplaySimulator } from "@/features/simulator";
 import { getCandles, getInstrumentBySymbol } from "@/services/market-data/candles";
 
 // Same starter set as /chart (ADR-016) — not a general instrument search.
@@ -16,12 +17,6 @@ const DEFAULT_SYMBOL = "SPY";
 const TIMEFRAME = "1d";
 const TIMEFRAME_LABEL = "1 day";
 const LOOKBACK_DAYS = 730;
-
-// bg-surface/text-foreground + [&>option] overrides — see /chart's
-// selectClassName for the cross-browser native-<select> contrast reasoning
-// this copies (ENGINEERING_PRINCIPLES §16 rule of three: second use here).
-const selectClassName =
-  "border-input bg-surface text-foreground h-8 rounded-lg border px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 [&>option]:bg-surface [&>option]:text-foreground";
 
 export default async function ReplayPage({
   searchParams,
@@ -67,20 +62,20 @@ export default async function ReplayPage({
         <form className="flex flex-wrap items-end gap-2" action="/replay">
           <div className="flex flex-col gap-1">
             <Label htmlFor="symbol">Instrument</Label>
-            <select id="symbol" name="symbol" defaultValue={symbol} className={selectClassName}>
+            <Select id="symbol" name="symbol" defaultValue={symbol}>
               {INSTRUMENT_OPTIONS.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <Button type="submit">Go</Button>
         </form>
       </div>
 
-      <ReplayChart
+      <ReplaySimulator
         candles={candles}
         instrumentLabel={instrument.symbol}
         timeframeLabel={TIMEFRAME_LABEL}

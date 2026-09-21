@@ -1,6 +1,7 @@
 import { PriceChart } from "@/components/chart/PriceChart";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { getCandles, getInstrumentBySymbol, timeframeSchema } from "@/services/market-data/candles";
 import type { Timeframe } from "@/types/market.types";
 
@@ -39,22 +40,6 @@ function parseTimeframe(value: string | undefined): Timeframe {
   const parsed = timeframeSchema.safeParse(value);
   return parsed.success ? parsed.data : DEFAULT_TIMEFRAME;
 }
-
-// bg-surface/text-foreground here, not bg-transparent like <Input>: a
-// <select>'s dropdown popup is a native, separate rendering surface, not
-// layered over the page like an input's box is. Chromium paints that
-// popup using the *select's own* resolved background-color/color, so a
-// transparent background falls back to the browser's default (white) —
-// combined with our inherited near-white dark-mode text color, that made
-// every option white-on-white except the one row the OS highlights blue
-// (§11 AA contrast bug). The [&>option] overrides reinforce the same
-// tokens directly on each <option>, which Chromium and Firefox both honor
-// for the popup list; Safari's native popup does not respect per-option
-// styling at all (a known cross-browser limit, not fixable from CSS) and
-// falls back to the OS's own light/dark appearance instead, which is
-// legible either way since it's not our (broken) white default.
-const selectClassName =
-  "border-input bg-surface text-foreground h-8 rounded-lg border px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 [&>option]:bg-surface [&>option]:text-foreground";
 
 export default async function ChartPage({
   searchParams,
@@ -99,24 +84,24 @@ export default async function ChartPage({
         <form className="flex flex-wrap items-end gap-2" action="/chart">
           <div className="flex flex-col gap-1">
             <Label htmlFor="symbol">Instrument</Label>
-            <select id="symbol" name="symbol" defaultValue={symbol} className={selectClassName}>
+            <Select id="symbol" name="symbol" defaultValue={symbol}>
               {INSTRUMENT_OPTIONS.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <div className="flex flex-col gap-1">
             <Label htmlFor="tf">Timeframe</Label>
-            <select id="tf" name="tf" defaultValue={timeframe} className={selectClassName}>
+            <Select id="tf" name="tf" defaultValue={timeframe}>
               {Object.entries(TIMEFRAME_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <Button type="submit">Go</Button>

@@ -241,3 +241,50 @@ export type ClosedPositionResult =
       engineVersion: string;
     }
   | { ok: false; error: EngineError; engineVersion: string };
+
+// ---------------------------------------------------------------------------
+// Position sizing (M-9 Session 4, GLOSSARY.md "Position sizing")
+// ---------------------------------------------------------------------------
+
+/**
+ * DATABASE_SCHEMA.md §1's `user_settings.default_risk_pct` check constraint
+ * (`between 0.1 and 5`) — a schema-level expression of Rule 7 (never
+ * encourage reckless risk-taking). `computePositionSize` enforces the
+ * upper bound by CLAMPING (never silently sizing a position into more risk
+ * than the product allows), not by rejecting the input outright.
+ */
+export const MAX_RISK_PCT = 5;
+
+/**
+ * `riskPct` is a plain decimal percentage (`1.5` means 1.5%), not a
+ * branded unit — it's a ratio/parameter, not a price or a money amount,
+ * so ADR-014's "multiplied price by price" bug class doesn't apply to it.
+ * `entryPrice`/`stopPrice` only need to be two points on the same price
+ * axis; `computePositionSize` doesn't need to know long or short — the
+ * risk per share is the unsigned distance between them either way.
+ */
+export type PositionSizeInput = {
+  accountBalance: MoneyUnits;
+  riskPct: number;
+  entryPrice: PriceUnits;
+  stopPrice: PriceUnits;
+};
+
+/**
+ * `appliedRiskPct`/`clamped` let a caller show "sized at 5% (you asked for
+ * 10%)" rather than silently substituting a different number than what was
+ * requested (Rule 8 — honest feedback, never hide what the product did).
+ * `riskAmount` is the actual dollar amount the sized position risks at
+ * `appliedRiskPct` — surfaced so a caller can show "risking $1,000.00 of
+ * $100,000.00" without re-deriving it.
+ */
+export type PositionSizeResult =
+  | {
+      ok: true;
+      quantity: QuantityUnits;
+      riskAmount: MoneyUnits;
+      appliedRiskPct: number;
+      clamped: boolean;
+      engineVersion: string;
+    }
+  | { ok: false; error: EngineError; engineVersion: string };
