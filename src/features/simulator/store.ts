@@ -14,11 +14,15 @@ type SimulatorStoreState = {
   orderError: EngineError | null;
   /** The most recently revealed bar's close -- the mark price `PositionPanel` uses for unrealized PnL/R (Session 4). `null` until the first bar reveals. */
   lastPrice: PriceUnits | null;
+  /** TD-10's manual close, queued for the next revealed bar (Session 4) -- see `process-bar.ts`'s `SimulatorBarState.closeRequested` doc comment. */
+  closeRequested: boolean;
 };
 
 type SimulatorStoreActions = {
   /** Only takes effect while flat (no pending order, no open position) -- the UI hides the order ticket otherwise, so this is a defensive no-op, not a user-facing path. */
   submitOrder: (order: OrderTicketSubmission) => void;
+  /** TD-10 (Session 4) -- only takes effect with an open position and no request already queued; `PositionPanel` hides the button otherwise. */
+  requestClose: () => void;
   /** Wired directly as `<ReplayChart onBarRevealed>` (Session 3, ADR-007) -- runs one revealed bar through the pure `processBar`. */
   onBarRevealed: (bar: EngineBar) => void;
   reset: () => void;
@@ -32,6 +36,7 @@ const INITIAL_STATE: SimulatorStoreState = {
   lastClosedTrade: null,
   orderError: null,
   lastPrice: null,
+  closeRequested: false,
 };
 
 /**
@@ -55,12 +60,19 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
     set({ pendingOrder: order, orderError: null, lastClosedTrade: null });
   },
 
+  requestClose: () => {
+    const { position, closeRequested } = get();
+    if (position === null || closeRequested) return;
+    set({ closeRequested: true });
+  },
+
   onBarRevealed: (bar) => {
-    const { pendingOrder, position } = get();
-    const result = processBar({ pendingOrder, position }, bar, DEFAULT_ENGINE_CONFIG);
+    const { pendingOrder, position, closeRequested } = get();
+    const result = processBar({ pendingOrder, position, closeRequested }, bar, DEFAULT_ENGINE_CONFIG);
     set({
       pendingOrder: result.pendingOrder,
       position: result.position,
+      closeRequested: result.closeRequested,
       lastPrice: bar.close,
       ...(result.closedTrade ? { lastClosedTrade: result.closedTrade } : {}),
       ...(result.error ? { orderError: result.error } : {}),
