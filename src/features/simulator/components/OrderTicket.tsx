@@ -19,6 +19,7 @@ import { logger } from "@/lib/logger";
 import { cn } from "@/utils/cn";
 
 import { CapturedOrderSummary } from "./CapturedOrderSummary";
+import { SizeByRiskFields } from "./SizeByRiskFields";
 import {
   orderTicketSchema,
   toOrderTicketSubmission,
@@ -26,6 +27,7 @@ import {
   type OrderTicketSubmission,
   type ValidatedOrderTicketValues,
 } from "../lib/order-ticket-schema";
+import { computeSizedQuantity } from "../lib/sized-quantity";
 
 const DEFAULT_VALUES: OrderTicketFormValues = {
   direction: "long",
@@ -35,6 +37,13 @@ const DEFAULT_VALUES: OrderTicketFormValues = {
   stopPrice: "",
   plannedStopPrice: "",
   plannedTargetPrice: "",
+  plannedEntryPrice: "",
+  // GLOSSARY.md "Position sizing": seeing how account size changes
+  // position size is the lesson -- pre-filled, editable, never hidden.
+  // $100,000 matches sim_accounts.starting_balance's own default
+  // (DATABASE_SCHEMA.md §4).
+  accountBalance: "100000",
+  riskPct: "",
 };
 
 const directionOptionClassName =
@@ -66,11 +75,13 @@ type OrderTicketProps = {
  */
 export function OrderTicket({ onSubmit }: OrderTicketProps) {
   const [capturedOrder, setCapturedOrder] = useState<OrderTicketSubmission | null>(null);
+  const [sizingNote, setSizingNote] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
     control,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<OrderTicketFormValues, unknown, ValidatedOrderTicketValues>({
     resolver: zodResolver(orderTicketSchema),
@@ -82,6 +93,29 @@ export function OrderTicket({ onSubmit }: OrderTicketProps) {
   // subscription state), so the compiler skips memoizing this whole
   // component when it sees watch() called directly.
   const orderType = useWatch({ control, name: "orderType" });
+
+  /**
+   * The "size by risk" live recompute (GLOSSARY.md "Position sizing") --
+   * wired as the `onChange` for all four sizing inputs (accountBalance,
+   * riskPct, plannedEntryPrice, plannedStopPrice) rather than a
+   * `useEffect` watching them (§17: `useEffect` is a last resort, and this
+   * is the same event-driven pattern the orderType handler already uses).
+   * `computeSizedQuantity` (lib/sized-quantity.ts) owns every actual
+   * decision; this is just the imperative RHF wiring around it. Reads via
+   * `getValues()` (no subscription, no re-render), not `useWatch` -- only
+   * the CURRENT values at the moment one field changes are needed.
+   */
+  function recomputeSizedQuantity() {
+    const outcome = computeSizedQuantity(getValues());
+    if (outcome.status === "incomplete") {
+      setSizingNote(null);
+      return;
+    }
+    if (outcome.status === "sized") {
+      setValue("quantity", outcome.quantity);
+    }
+    setSizingNote(outcome.note);
+  }
 
   const onValid = handleSubmit((validated) => {
     const order = toOrderTicketSubmission(validated);
@@ -175,7 +209,7 @@ export function OrderTicket({ onSubmit }: OrderTicketProps) {
               id="plannedStopPrice"
               label="Planned stop-loss ($, optional)"
               error={errors.plannedStopPrice?.message}
-              registration={register("plannedStopPrice")}
+              registration={register("plannedStopPrice", { onChange: recomputeSizedQuantity })}
             />
             <FormField
               id="plannedTargetPrice"
@@ -184,6 +218,13 @@ export function OrderTicket({ onSubmit }: OrderTicketProps) {
               registration={register("plannedTargetPrice")}
             />
           </div>
+
+          <SizeByRiskFields
+            register={register}
+            errors={errors}
+            note={sizingNote}
+            onSizingInputChange={recomputeSizedQuantity}
+          />
 
           <Button type="submit" className="w-full">
             Place simulated order

@@ -19,6 +19,9 @@ function baseValues(overrides: Partial<OrderTicketFormValues> = {}): OrderTicket
     stopPrice: "",
     plannedStopPrice: "",
     plannedTargetPrice: "",
+    plannedEntryPrice: "",
+    accountBalance: "",
+    riskPct: "",
     ...overrides,
   };
 }
@@ -272,6 +275,9 @@ describe("toOrderTicketSubmission", () => {
       stopPrice: undefined,
       plannedStopPrice: undefined,
       plannedTargetPrice: undefined,
+      plannedEntryPrice: undefined,
+      accountBalance: undefined,
+      riskPct: undefined,
     };
 
     const result = toOrderTicketSubmission(values);
@@ -293,6 +299,9 @@ describe("toOrderTicketSubmission", () => {
       stopPrice: undefined,
       plannedStopPrice: 155,
       plannedTargetPrice: 140,
+      plannedEntryPrice: undefined,
+      accountBalance: undefined,
+      riskPct: undefined,
     };
 
     const result = toOrderTicketSubmission(values);
@@ -323,6 +332,9 @@ describe("toOrderTicketSubmission", () => {
       stopPrice: 100,
       plannedStopPrice: undefined,
       plannedTargetPrice: undefined,
+      plannedEntryPrice: undefined,
+      accountBalance: undefined,
+      riskPct: undefined,
     };
 
     const result = toOrderTicketSubmission(values);

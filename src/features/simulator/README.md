@@ -8,14 +8,15 @@ data, track open positions, and realize PnL/R-multiple on close
 realistic simulations). Feeds the journal (M-9 later sessions) and stats
 dashboards once trades persist.
 
-**Status: Session 3 of ~4 — the keystone. A submitted order now actually
-fills as replay bars are revealed, and the position it opens is shown
-live, including a bracket exit.** Session 1 was `sim_accounts` (the DB
-table) and pure account/order/position *state logic*. Session 2 added the
-order-entry panel. Session 3 wires the two together through `/lib/engine`
-and mounts the result on `/replay`. Still no persistence to the DB, no
-stats/journal, no risk-% sizing helper. See Extension guide below for
-what's next.
+**Status: Session 4 of ~4 (in progress) — making the keystone usable and
+closing out M-9's debt.** Session 1 was `sim_accounts` and pure
+account/order/position *state logic*. Session 2 added the order-entry
+panel. Session 3 wired order → engine → position end to end. Session 4,
+sub-session A: a risk-% position-sizing helper (`/lib/engine`'s
+`computePositionSize`) wired into `OrderTicket` as an optional "size by
+risk" section that live-fills `quantity`. Still to come this session:
+fuller P&L/R display (B), TD-10's manual close + single-bracket-leg exit
+(C), and close-out (D). Still no persistence to the DB.
 
 ## Architecture
 
@@ -64,15 +65,17 @@ what's next.
   (ADR-014) — kept out of the schema itself so `useForm`'s field types stay
   plain strings-in/numbers-out, with no zod-transform-into-branded-type
   generic fighting React Hook Form's resolver typing.
-- **`components/OrderTicket.tsx`** (Session 2) — the order-entry panel.
-  Client component (leaf — nothing above it needs to be client-side).
-  Direction (buy/long, sell/short), order type (market/limit/stop),
-  quantity, and optional planned stop-loss/target. Inline field errors via
-  the shared `<FormField>` (`aria-describedby`, `aria-invalid`), not
-  toasts (§7). On a valid submit it converts to engine units and either
-  calls the `onSubmit` prop or logs the captured order (`logger.info`,
-  §8) — it does **not** call `/lib/engine`, fill anything, or persist
-  anything; that's Session 3.
+- **`components/OrderTicket.tsx`** (Session 2, sizing added Session 4) —
+  the order-entry panel. Client component (leaf — nothing above it needs
+  to be client-side). Direction (buy/long, sell/short), order type
+  (market/limit/stop), quantity, and optional planned stop-loss/target.
+  Inline field errors via the shared `<FormField>` (`aria-describedby`,
+  `aria-invalid`), not toasts (§7). On a valid submit it converts to
+  engine units and either calls the `onSubmit` prop or logs the captured
+  order (`logger.info`, §8) — it does **not** call `/lib/engine` to fill
+  anything or persist anything (that's Session 3/`PositionPanel`), though
+  it DOES call `/lib/engine`'s `computePositionSize` for sizing, via
+  `lib/sized-quantity.ts`.
 - **`components/CapturedOrderSummary.tsx`** (Session 2) — read-only
   presenter that echoes back a captured order in human units
   (`from*Units`, ADR-014), split out of `OrderTicket.tsx` to keep that
@@ -121,6 +124,28 @@ what's next.
   this is simulator consuming replay's public surface, never a deep
   import. `"use client"` stays at this leaf; `/replay/page.tsx` above it
   is still a Server Component.
+- **`/lib/engine/position-sizing.ts`** (Session 4, NOT in this feature —
+  see its own file) — `computePositionSize`. GLOSSARY.md "Position
+  sizing": `quantity = (accountBalance x riskPct) / |entryPrice -
+  stopPrice|`, clamped at `MAX_RISK_PCT` (5, `user_settings
+  .default_risk_pct`'s DB constraint), rounded down. Lives in `/lib/engine`
+  per ENGINEERING_PRINCIPLES §3.1, which explicitly lists position sizing
+  as engine territory alongside fills/PnL — not `features/simulator/lib`.
+- **`lib/sized-quantity.ts`** (Session 4) — `computeSizedQuantity`, the
+  pure half of `OrderTicket`'s live "size by risk" recompute. Takes the
+  four raw sizing form values (account balance, risk %, planned entry
+  price, planned stop-loss) and returns one of three outcomes: `incomplete`
+  (some field still blank), `rejected` (the engine refused the input —
+  e.g. entry equals stop), or `sized` (a quantity string + an explanatory
+  note, including the 5%-clamp wording). `OrderTicket` only wires this to
+  React Hook Form's `getValues()`/`setValue("quantity", ...)` — every
+  actual decision is here, hand-tested without a DOM.
+- **`components/SizeByRiskFields.tsx`** (Session 4) — presenter, split out
+  of `OrderTicket.tsx` (§3.2/§3.3, same reasoning as
+  `CapturedOrderSummary`) for the three sizing inputs (account balance,
+  risk %, planned entry price — `plannedStopPrice` is the fourth input
+  this needs, already its own field elsewhere on the ticket, not
+  duplicated here) plus the live note.
 
 ## Public API
 
@@ -163,13 +188,12 @@ fullyClosePosition(input: ClosePositionInput) -> FullCloseResult
 - **TD-10 (manual close / single-leg bracket):** the natural next increment
   on top of Session 3's wiring — a "Close position" action in
   `PositionPanel`, and a product decision on whether a stop-only or
-  target-only position should auto-exit.
-- **Session 4 (risk-% position sizing helper):** a new pure function
-  alongside `order-ticket-schema.ts`, surfaced in `OrderTicket` as an
-  optional "size by risk %" input feeding `quantity` — out of scope here
-  on purpose. Also where a fuller P&L/R display belongs; `PositionPanel`'s
-  current readout is deliberately minimal (just enough to see a fill and a
-  close happen).
+  target-only position should auto-exit. In progress this session
+  (sub-session C).
+- **Fuller P&L/R display (Session 4, sub-session B):** `PositionPanel`'s
+  open-position readout doesn't show unrealized PnL/R yet — reuse the
+  engine's own numbers (a `priceQuantityToMoney` call against the current
+  bar's price), don't recompute from scratch.
 
 ## Known limitations
 
@@ -211,10 +235,19 @@ fullyClosePosition(input: ClosePositionInput) -> FullCloseResult
   (Session 1) is never called from the UI (TD-08's trigger still hasn't
   fired). Adding to, or partially closing, an open position isn't
   possible from this UI yet.
-- **`OrderTicket`, `PositionPanel`, and `ReplaySimulator` have no
-  component tests yet** (TD-09). The validation/domain logic they depend
-  on (`orderTicketSchema`, `toOrderTicketSubmission`, `processBar`) is
-  covered at 100% branches; the React wiring around it is currently
-  verified only by typecheck/lint and a manual, live browser pass — the
-  repo has no React Testing Library/jsdom infrastructure yet, and adding
-  it was deliberately deferred rather than bundled into these sessions.
+- **`OrderTicket`, `PositionPanel`, `ReplaySimulator`, and
+  `SizeByRiskFields` have no component tests yet** (TD-09). The
+  validation/domain logic they depend on (`orderTicketSchema`,
+  `toOrderTicketSubmission`, `processBar`, `computePositionSize`,
+  `computeSizedQuantity`) is covered at 100% branches; the React wiring
+  around it is currently verified only by typecheck/lint and a manual,
+  live browser pass — the repo has no React Testing Library/jsdom
+  infrastructure yet, and adding it was deliberately deferred rather than
+  bundled into these sessions.
+- **"Planned entry price" (sizing) doesn't sync with the limit/stop
+  price.** They're deliberately independent fields (Session 4) — sizing a
+  position doesn't require the order to actually be a limit/stop order at
+  that exact price, and two-way syncing them would add real complexity
+  for a marginal convenience. A trader using a limit order can type the
+  same number in both if they want them to match; nothing does it for
+  them.

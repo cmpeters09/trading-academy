@@ -22,10 +22,26 @@ import type { PriceUnits, QuantityUnits } from "@/lib/engine/types";
  * resolver typing over.
  */
 
+/**
+ * Parses a raw form-field string into a decimal, or `undefined` if blank
+ * or not a valid number -- the one shared parsing step. `requiredPositive
+ * Decimal`/`optionalPositiveDecimal` below use it inside their Zod
+ * transforms; `OrderTicket`'s "size by risk" live recompute (Session 4)
+ * uses it directly, straight off React Hook Form's current field values,
+ * outside of any Zod parse -- one definition of "what counts as a valid
+ * decimal here," not two.
+ */
+export function parseDecimalInput(raw: string): number | undefined {
+  const trimmed = raw.trim();
+  if (trimmed === "") return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function requiredPositiveDecimal(message: string) {
   return z.string().transform((raw, ctx) => {
-    const parsed = Number(raw.trim());
-    if (raw.trim() === "" || !Number.isFinite(parsed) || parsed <= 0) {
+    const parsed = parseDecimalInput(raw);
+    if (parsed === undefined || parsed <= 0) {
       ctx.addIssue({ code: "custom", message });
       return z.NEVER;
     }
@@ -35,11 +51,15 @@ function requiredPositiveDecimal(message: string) {
 
 function optionalPositiveDecimal(message: string) {
   return z.string().transform((raw, ctx) => {
-    const trimmed = raw.trim();
-    if (trimmed === "") return undefined;
+    // Blank is checked FIRST and separately from parseDecimalInput's own
+    // undefined -- blank means "not provided" (silently fine, optional);
+    // a non-blank value that still parses to undefined means "garbage"
+    // (raise the error). Collapsing those two into one check would treat
+    // a typo the same as an empty field.
+    if (raw.trim() === "") return undefined;
 
-    const parsed = Number(trimmed);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    const parsed = parseDecimalInput(raw);
+    if (parsed === undefined || parsed <= 0) {
       ctx.addIssue({ code: "custom", message });
       return z.NEVER;
     }
@@ -55,6 +75,13 @@ const orderTicketFieldsSchema = z.object({
   stopPrice: optionalPositiveDecimal("Enter a stop price greater than 0"),
   plannedStopPrice: optionalPositiveDecimal("Enter a stop-loss price greater than 0"),
   plannedTargetPrice: optionalPositiveDecimal("Enter a target price greater than 0"),
+  // Session 4 -- inputs for OrderTicket's "size by risk" helper only.
+  // None of these three are part of the submitted order itself
+  // (toOrderTicketSubmission below doesn't carry them) -- they exist
+  // purely to compute `quantity` via /lib/engine's computePositionSize.
+  plannedEntryPrice: optionalPositiveDecimal("Enter an entry price greater than 0"),
+  accountBalance: optionalPositiveDecimal("Enter an account balance greater than 0"),
+  riskPct: optionalPositiveDecimal("Enter a risk % greater than 0"),
 });
 
 /**
