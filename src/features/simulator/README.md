@@ -16,9 +16,12 @@ sub-session A: a risk-% position-sizing helper (`/lib/engine`'s
 `computePositionSize`) wired into `OrderTicket` as an optional "size by
 risk" section that live-fills `quantity`. Sub-session B: the open-position
 readout now shows unrealized PnL/R, marked to the latest revealed bar and
-updating live as replay advances. Still to come this session: TD-10's
-manual close + single-bracket-leg exit (C), and close-out (D). Still no
-persistence to the DB.
+updating live as replay advances. Sub-session C: TD-10 paid — a manual
+"Close position" button (queued the same way an entry fills, at the NEXT
+bar's open) and honest single-leg exits (a position with only a stop or
+only a target now actually auto-exits, reusing `fillStopOrder`/
+`fillLimitOrder` directly instead of faking a second bracket leg). Still
+to come this session: close-out (D). Still no persistence to the DB.
 
 ## Architecture
 
@@ -95,29 +98,37 @@ persistence to the DB.
   per-`sim_account` configurable — `sim_accounts` has no such column
   (DATABASE_SCHEMA.md §4) — this is an app-wide default until a later
   session makes it one.
-- **`lib/process-bar.ts`** (Session 3) — the keystone: `processBar(state,
-  bar, config) -> result`, pure. Given the simulator's current pending
-  order / open position and one revealed bar, reuses `/lib/engine`'s fill
-  functions and `resolveBracket` (bar-path ambiguity, RISKS R-3) — never
-  re-derives fill or PnL math. A filled order becomes an open position via
-  `openPosition`; a COMPLETE bracket hit (both planned stop AND target —
-  `resolveBracket` has no meaning for one leg) fully closes it via
-  `fullyClosePosition`. No same-bar bracket check on the bar a position
-  just opened on (a daily bar's OHLC has no sub-bar ordering info — see
-  the module's own doc comment). Re-visited bars (step back, then forward
-  again) can't double-fill or double-close: a fill clears the pending
-  order, and a no-outcome check is idempotent — verified both by unit test
-  and live in a browser (step back after a fill, step forward again, the
-  position doesn't change).
-- **`store.ts`** (Session 3, `lastPrice` added Session 4) —
+- **`lib/process-bar.ts`** (Session 3, manual close + single-leg exits
+  added Session 4) — the keystone: `processBar(state, bar, config) ->
+  result`, pure. Given the simulator's current pending order / open
+  position / close request and one revealed bar, reuses `/lib/engine`'s
+  fill functions, `resolveBracket` (bar-path ambiguity, RISKS R-3), and
+  `finishClose` (this module's own shared "apply `fullyClosePosition` and
+  unwrap its double-nested result" helper) — never re-derives fill or PnL
+  math. A filled order becomes an open position via `openPosition`. An
+  open position can then exit four ways: a manual close request
+  (`closeRequested`, TD-10 — takes PRIORITY over everything else, fills
+  at THIS bar's open via `fillMarketOrder`, same as an entry); a complete
+  bracket (both planned stop AND target) via `resolveBracket`; a stop-only
+  position via `fillStopOrder` directly (the closing side, opposite of
+  the entry side); or a target-only position via `fillLimitOrder`
+  directly. No same-bar exit check on the bar a position just opened on
+  (a daily bar's OHLC has no sub-bar ordering info — see the module's own
+  doc comment). Re-visited bars (step back, then forward again) can't
+  double-fill or double-close: a fill/close clears `pendingOrder`/
+  `closeRequested`, and a no-outcome check is idempotent — verified both
+  by unit test and live in a browser.
+- **`store.ts`** (Session 3, `lastPrice`/`requestClose` added Session 4) —
   `useSimulatorStore` (ADR-005: ephemeral client state, one store per
   feature). Holds `pendingOrder` / `position` / `lastClosedTrade` /
-  `orderError` / `lastPrice`; `submitOrder` and `onBarRevealed` are thin
-  delegates to Session 1's reducer and `process-bar.ts` — all the actual
-  logic lives in `lib/`, same split as `features/replay/store.ts`.
-  `lastPrice` is set to every revealed bar's close, independent of
-  whether that bar caused a fill — it's the mark price `PositionPanel`
-  uses for unrealized PnL/R.
+  `orderError` / `lastPrice` / `closeRequested`; `submitOrder`,
+  `requestClose`, and `onBarRevealed` are thin delegates to Session 1's
+  reducer and `process-bar.ts` — all the actual logic lives in `lib/`,
+  same split as `features/replay/store.ts`. `lastPrice` is set to every
+  revealed bar's close, independent of whether that bar caused a fill —
+  it's the mark price `PositionPanel` uses for unrealized PnL/R.
+  `requestClose` (TD-10) is a no-op unless a position is open and no
+  close is already requested.
 - **`lib/unrealized-pnl.ts`** (Session 4) — `computeUnrealizedPnl`. Same
   gross-PnL formula as Session 1's `closePosition` (`priceQuantityToMoney`
   on the price delta, reused, never re-derived), marked against
@@ -128,14 +139,16 @@ persistence to the DB.
   fee. `rMultiple` is `null` both when there's no planned stop AND when
   one sits on the wrong side of entry (TD-08's reachable gap) — display
   math stays honest rather than showing a nonsensical ratio.
-- **`components/PositionPanel.tsx`** (Session 3, unrealized PnL/R added
-  Session 4) — switches between the order ticket (flat), a "pending,
-  waiting for the next bar" status, and the open-position readout
-  (direction, quantity, avg entry, bracket if set, and unrealized PnL/R
-  once a mark price exists), plus an inline rejected-order error or
-  last-closed-trade summary next to the ticket (§7: inline, never a
-  toast). Unrealized PnL/R is colored (`text-success`/`text-danger`) but
-  always paired with an explicit `+`/`-` sign, never color alone (§11).
+- **`components/PositionPanel.tsx`** (Session 3, unrealized PnL/R and the
+  close button added Session 4) — switches between the order ticket
+  (flat), a "pending, waiting for the next bar" status, and the
+  open-position readout (direction, quantity, avg entry, bracket if set,
+  unrealized PnL/R once a mark price exists, and either a "Close
+  position" button or a "closing at the next bar's open" status once
+  clicked, TD-10), plus an inline rejected-order error or last-closed-trade
+  summary next to the ticket (§7: inline, never a toast). Unrealized
+  PnL/R is colored (`text-success`/`text-danger`) but always paired with
+  an explicit `+`/`-` sign, never color alone (§11).
 - **`components/ReplaySimulator.tsx`** (Session 3) — mounts `PositionPanel`
   next to replay's `ReplayChart`, wiring `onBarRevealed` (M-10's
   mechanism) straight to `useSimulatorStore`. Lives here, not in
@@ -204,11 +217,10 @@ fullyClosePosition(input: ClosePositionInput) -> FullCloseResult
   target on an already-open position): add it to `lib/position.ts` next to
   the existing four, with its own input/result types in `lib/types.ts` and
   hand-computed tests in `lib/position.test.ts`, same pattern.
-- **TD-10 (manual close / single-leg bracket):** the natural next increment
-  on top of this session's wiring — a "Close position" action in
-  `PositionPanel`, and a product decision on whether a stop-only or
-  target-only position should auto-exit. Next up this session
-  (sub-session C).
+- **Partial manual close:** `requestClose`/`tryCloseAtMarket` only support
+  closing the WHOLE position (mirrors `fullyClosePosition`). A "close half"
+  action would need a new store field (how much to close) and
+  `partiallyClosePosition` instead — not built, no current demand.
 
 ## Known limitations
 
@@ -240,10 +252,6 @@ fullyClosePosition(input: ClosePositionInput) -> FullCloseResult
   exact scenario, hand-verified — so an invalid stop/target can't silently
   reach an open position; it's just caught one step later than a limit/
   stop order's would be.
-- **No manual close, and a position with only one bracket leg never
-  auto-exits** (TD-10). `PositionPanel` has no "close position" button;
-  the only way an open position closes is a complete bracket (both a
-  planned stop AND target) getting hit.
 - **Only one order/position at a time.** `useSimulatorStore.submitOrder`
   is a no-op while a pending order or open position already exists, and
   `PositionPanel` hides the ticket in both states — `addToPosition`

@@ -96,6 +96,10 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Owner:** Christian
 - **Status:** open
 
+---
+
+## Paid debt
+
 ### TD-10 · No way to manually close a position, and a position with only ONE bracket leg never auto-exits
 - **Incurred:** M-9 Session 3, 2026-09-18
 - **Why:** `lib/process-bar.ts`'s bracket check only runs when a position has BOTH a planned stop-loss AND target (`resolveBracket` has no meaning for one leg — ADR-007/RISKS R-3's model is a complete bracket or nothing). A position opened with no stop/target, or only one of the two, simply stays open forever from the engine's point of view — there's no manual "close position" action in `PositionPanel` to fall back on either, since this session's scope was "see a fill happen," not full order management.
@@ -103,11 +107,7 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Proposed fix:** A manual "Close position (market)" action in `PositionPanel`, calling `fullyClosePosition` against a market-style fill on the currently revealed bar (or, for full ADR-007 consistency, queuing a closing market order that fills at the NEXT bar's open, same as an entry) — plus, separately, deciding whether a single-leg bracket (stop only, or target only) should auto-exit using `fillStopOrder`/exact-price logic directly rather than `resolveBracket`. ~2-3h; a real product decision, not just an implementation task.
 - **Trigger to pay:** Before Session 4, which is expected to add fuller position management (the risk-% sizing helper implies deciding how a trade's lifecycle ends). Not blocking Session 3's own goal (seeing a fill happen) since a bracket-closed position already demonstrates the full lifecycle end-to-end.
 - **Owner:** Christian
-- **Status:** open
-
----
-
-## Paid debt
+- **Status:** paid — M-9 Session 4 sub-session C, 2026-09-21. Went with the queued-market-close design (a `closeRequested` flag consumed on the NEXT revealed bar as a market fill, mirroring how an entry order fills — not an immediate current-bar close) for full ADR-007 consistency. Single-leg exits reuse `fillStopOrder`/`fillLimitOrder` directly with the closing side (opposite of the position's entry side) rather than faking a second bracket leg — verified by hand that the touch-check and fill-price formulas match `bracket.ts`'s own stop/target math exactly in both directions. `PositionPanel` now shows a "Close position" button (replaced by a "closing at the next bar's open" status once clicked) whenever a position is open. Verified live in the browser: opened a position with no bracket at all (previously unclosable), clicked "Close position," stepped forward, watched it close with the correct net PnL.
 
 ### TD-02 · ADR-013/014/015 referenced but never written
 - **Incurred:** M-1, 2026-07-13

@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fromMoneyUnits, fromPriceUnits, fromQuantityUnits } from "@/lib/engine/units";
 
@@ -30,11 +31,13 @@ function pnlColorClass(value: number): string {
  * `useSimulatorStore` changes --
  *
  * 1. **Open position** -- direction, quantity, avg entry, the bracket if
- *    one was set, and unrealized PnL/R (Session 4) marked against the
- *    latest revealed bar's close (`lastPrice`) -- gross, labeled "before
- *    exit costs" (Q3: no exit commission has actually been paid yet). The
- *    ticket is hidden; this session doesn't support adding to or manually
- *    closing a position from here (README: known limitation).
+ *    one was set, unrealized PnL/R (Session 4) marked against the latest
+ *    revealed bar's close (`lastPrice`) -- gross, labeled "before exit
+ *    costs" (Q3: no exit commission has actually been paid yet) -- and
+ *    either a "Close position" button or a "closing at the next bar's
+ *    open" status once that button's been clicked (TD-10). The ticket is
+ *    hidden; this session still doesn't support adding to an open
+ *    position (README: known limitation).
  * 2. **Order pending** -- submitted, waiting for the next revealed bar.
  *    The ticket is hidden so a second order can't be queued behind it.
  * 3. **Flat** -- the ticket is shown so a new order can be placed,
@@ -45,9 +48,11 @@ export function PositionPanel() {
   const pendingOrder = useSimulatorStore((state) => state.pendingOrder);
   const position = useSimulatorStore((state) => state.position);
   const lastPrice = useSimulatorStore((state) => state.lastPrice);
+  const closeRequested = useSimulatorStore((state) => state.closeRequested);
   const lastClosedTrade = useSimulatorStore((state) => state.lastClosedTrade);
   const orderError = useSimulatorStore((state) => state.orderError);
   const submitOrder = useSimulatorStore((state) => state.submitOrder);
+  const requestClose = useSimulatorStore((state) => state.requestClose);
 
   if (position) {
     // lastPrice is only ever null before the first bar reveals -- and a
@@ -98,6 +103,15 @@ export function PositionPanel() {
               </>
             ) : null}
           </dl>
+          {closeRequested ? (
+            <p role="status" aria-live="polite" className="mt-3 text-sm text-muted-foreground">
+              Closing at the next bar&apos;s open…
+            </p>
+          ) : (
+            <Button type="button" variant="outline" className="mt-3 w-full" onClick={requestClose}>
+              Close position
+            </Button>
+          )}
         </CardContent>
       </Card>
     );
