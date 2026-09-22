@@ -111,6 +111,24 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Owner:** Christian
 - **Status:** open
 
+### TD-13 · `validate-trade`'s Zod schema and structured logger are duplicated, not shared, between the Next.js client and the Deno Edge Function
+- **Incurred:** M-11 Session 3, 2026-09-22
+- **Why:** ENGINEERING_PRINCIPLES §7 asks for "the same Zod schema... shared between client and Edge Function (single definition in `/types` or the feature)." `supabase/functions/validate-trade/schema.ts` instead redeclares the `ClosedTrade` shape (`src/features/simulator/lib/process-bar.ts`) as its own Zod object, and `log.ts` redeclares `src/lib/logger.ts`'s `{level, event, ...context}` shape rather than importing it. Real sharing needs one of: a Deno import map that resolves `@/`-style aliases the way Next's bundler does, or extracting a runtime-agnostic package with zero Node-specific types (`src/lib/logger.ts` currently types against `NodeJS.ErrnoException`, which isn't Deno-safe). Neither is a decision to make silently inside a "skeleton, keep it small" session — it's a real module-resolution/infra choice.
+- **Risk if unpaid:** the two schemas can drift — a field added to `ClosedTrade` (e.g. a future session extending it) has no compiler error forcing `schema.ts` to be updated too, only a runtime 400 the first time a real payload is sent. Same risk, smaller, for the logger's shape.
+- **Proposed fix:** either (a) add a Deno import map to `supabase/functions/` mapping `@/` to `../../src/` and confirm Next's `@/lib/engine`-adjacent modules are Deno-clean (no Node builtins), or (b) extract a `packages/shared` (or `src/types/`) module with zero framework-specific imports that both sides import by relative path. ~2-3h either way, plus verifying the engine itself is Deno-portable before ADR-007's re-validation step needs it anyway.
+- **Trigger to pay:** before or alongside the session that makes the engine itself run in this Edge Function (ADR-007) — that work already has to solve Next.js/Deno code-sharing for the engine, so solving it once for the schema/logger too is close to free then and wasted effort now.
+- **Owner:** Christian
+- **Status:** open
+
+### TD-14 · `validate-trade` has no working idempotency — retrying a request could double-write a trade once writes exist
+- **Incurred:** M-11 Session 3, 2026-09-22
+- **Why:** ENGINEERING_PRINCIPLES §19/§20 require any write that can be triggered twice by a retry to have a unique constraint that makes the second write a no-op — but this session is explicitly skeleton-only (no DB writes), so only the KEY DESIGN is done, not the mechanism. Design: the client stamps one `clientTradeKey` (UUID) onto a trade at the moment it closes — same "stamped once, never regenerated" discipline `entryTs` already follows (`src/features/simulator/lib/process-bar.ts`) — and resends the same key on every retry of the same close. `supabase/functions/validate-trade/schema.ts` already requires `clientTradeKey` in the payload (so the contract is correct from day one), but nothing produces it yet: `ClosedTrade` has no such field, and the eventual `trades` table has no column or unique constraint for it (`20260922142658_create_trade_persistence_tables.sql` predates this design). The Edge Function accepts and logs the key but does no duplicate-check — there is nothing to check against yet.
+- **Risk if unpaid:** none *today* — this function performs no writes, so there is nothing to double-write. The risk is entirely forward-looking: whichever session adds the real `trades` insert must not ship it before this is paid, or a network retry / double-click on trade close can materialize the same round-trip twice.
+- **Proposed fix:** (1) add `clientTradeKey: string` to `ClosedTrade` and stamp it once, client-side, alongside `entryTs`; (2) a migration adding `trades.client_trade_key uuid not null` with `unique (user_id, client_trade_key)`; (3) in the Edge Function, before inserting, `select` on `(user_id, client_trade_key)` — if found, return the existing trade instead of inserting again (a retry is a no-op that returns the same result, not an error). ~1-2h once the write path itself is being built, since it's the same session that decides the insert's exact shape.
+- **Trigger to pay:** before any session implements the real `orders`/`executions`/`trades` insert in `validate-trade` — hard blocker, not "someday." Ungated, a retry-double-write here would corrupt a user's win-rate/PnL stats, which Rule 8/§14's "a wrong number is worse than a crash" treats as the worst class of bug this app can ship.
+- **Owner:** Christian
+- **Status:** open
+
 ---
 
 ## Paid debt

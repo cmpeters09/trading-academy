@@ -34,5 +34,14 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    // Edge Functions run on Deno, not Node/tsc -- npm: specifiers, the
+    // global `Deno` namespace, and top-level `Deno.serve` all fail this
+    // project's Node-oriented tsconfig (moduleResolution: "bundler" has no
+    // idea what "npm:zod@4.4.3" means). Type-checked by `deno check`
+    // instead (via `supabase functions deploy`'s own bundling step, and
+    // optionally `deno check` locally), never by this repo's `tsc`.
+    "supabase/functions/**"
+  ]
 }

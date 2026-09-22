@@ -385,6 +385,16 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# M-11 Session 3 — validate-trade skeleton. `verify_jwt = true` is already
+# the platform default; stated explicitly here as documentation, not a
+# behavior change. This gates the request at the platform level (rejects a
+# missing/malformed JWT before the function even runs) — the function body
+# ALSO calls `auth.getUser()` itself (ENGINEERING_PRINCIPLES §20 rule 1),
+# because the platform check alone verifies the token but never hands the
+# function the authenticated user id.
+[functions.validate-trade]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327
