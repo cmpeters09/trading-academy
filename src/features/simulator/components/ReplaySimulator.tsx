@@ -12,6 +12,10 @@ type ReplaySimulatorProps = {
   candles: Candle[];
   instrumentLabel: string;
   timeframeLabel: string;
+  /** M-11 Session 2 -- stamped onto any trade this session closes (`ClosedTrade.instrumentId`). */
+  instrumentId: string;
+  /** M-11 Session 2 -- the user's `sim_account` this session trades against (`ClosedTrade.simAccountId`), resolved server-side by `/replay/page.tsx` via `getOrCreateDefaultSimAccount`. */
+  simAccountId: string;
 };
 
 /**
@@ -24,25 +28,41 @@ type ReplaySimulatorProps = {
  * deep import into replay's internals.
  *
  * `"use client"` stays at THIS leaf, not the page above it (§4) -- the
- * page (`/replay/page.tsx`) is still a Server Component fetching candles;
- * only the interactive subtree below it opts into the client.
+ * page (`/replay/page.tsx`) is still a Server Component fetching candles
+ * (and, M-11 Session 2, the sim account); only the interactive subtree
+ * below it opts into the client.
  */
 export function ReplaySimulator({
   candles,
   instrumentLabel,
   timeframeLabel,
+  instrumentId,
+  simAccountId,
 }: ReplaySimulatorProps) {
   // Resets the simulator's pending order / open position whenever the
   // candle array changes identity (a new instrument, via the page's own
-  // form) -- a position tracked against SPY bars is meaningless once the
-  // underlying data becomes AAPL's. Same "adjust store state during
-  // render, not an effect" pattern ReplayChart already uses for its own
-  // store, for the same reason (avoids ever rendering one render with a
-  // mismatched cursor/position).
+  // form), OR whenever instrumentId/simAccountId themselves change -- a
+  // position tracked against SPY bars (or stamped with SPY's instrumentId)
+  // is meaningless once the underlying data becomes AAPL's. Comparing
+  // against the STORE's own instrumentId/simAccountId (not a separate
+  // useState mirror) means this also fires correctly on first mount, when
+  // the store still has its `INITIAL_STATE` `null`s and every prop is
+  // "new" -- reset(context) always runs before any bar can be revealed,
+  // which is what lets onBarRevealed below treat a null context as
+  // unreachable. Same "adjust store state during render, not an effect"
+  // pattern ReplayChart already uses for its own store, for the same
+  // reason (avoids ever rendering one render with a mismatched cursor/
+  // position/context).
   const [trackedCandles, setTrackedCandles] = useState(candles);
-  if (trackedCandles !== candles) {
+  const storeInstrumentId = useSimulatorStore((state) => state.instrumentId);
+  const storeSimAccountId = useSimulatorStore((state) => state.simAccountId);
+  if (
+    trackedCandles !== candles ||
+    storeInstrumentId !== instrumentId ||
+    storeSimAccountId !== simAccountId
+  ) {
     setTrackedCandles(candles);
-    useSimulatorStore.getState().reset();
+    useSimulatorStore.getState().reset({ instrumentId, simAccountId });
   }
 
   const onBarRevealed = useSimulatorStore((state) => state.onBarRevealed);

@@ -27,7 +27,10 @@ import type {
  *   commission, and (optionally) a planned stop/target.
  * - `addToPosition` — a same-direction fill increases size; entry price
  *   becomes the volume-weighted average of the old and new fills
- *   (`position-math.ts`), entry commission accumulates.
+ *   (`position-math.ts`), entry commission accumulates. `entryTs`/
+ *   `entryEngineVersion` are carried over unchanged (spread from the old
+ *   position) -- both are stamped once, at open, same reasoning as
+ *   `types.ts`'s `OpenPosition` doc comment.
  * - `partiallyClosePosition` — an exit fill smaller than the open quantity.
  *   Realizes PnL/R for the closed slice only; the remaining position keeps
  *   its own fair share of entry commission (prorated by quantity), and
@@ -113,6 +116,7 @@ export function openPosition(input: OpenPositionInput): OpenPositionResult {
       quantity: input.fill.quantity,
       entryCommission: input.fill.commission,
       entryEngineVersion: input.engineVersion,
+      entryTs: input.entryTs,
       ...(input.plannedStopPrice !== undefined
         ? { plannedStopPrice: input.plannedStopPrice }
         : {}),

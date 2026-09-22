@@ -18,6 +18,7 @@ describe("computeUnrealizedPnl", () => {
       quantity: toQuantityUnits(10),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: "2026-01-01T00:00:00Z",
       plannedStopPrice: toPriceUnits(95),
     };
 
@@ -36,6 +37,7 @@ describe("computeUnrealizedPnl", () => {
       quantity: toQuantityUnits(10),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: "2026-01-01T00:00:00Z",
       plannedStopPrice: toPriceUnits(95),
     };
 
@@ -57,6 +59,7 @@ describe("computeUnrealizedPnl", () => {
       quantity: toQuantityUnits(20),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: "2026-01-01T00:00:00Z",
       plannedStopPrice: toPriceUnits(52),
     };
 
@@ -74,6 +77,7 @@ describe("computeUnrealizedPnl", () => {
       quantity: toQuantityUnits(5),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: "2026-01-01T00:00:00Z",
     };
 
     const result = computeUnrealizedPnl(position, toPriceUnits(110));
@@ -92,6 +96,7 @@ describe("computeUnrealizedPnl", () => {
       quantity: toQuantityUnits(10),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: "2026-01-01T00:00:00Z",
       plannedStopPrice: toPriceUnits(105),
     };
 
@@ -109,6 +114,7 @@ describe("computeUnrealizedPnl", () => {
       quantity: toQuantityUnits(10),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: "2026-01-01T00:00:00Z",
       plannedStopPrice: toPriceUnits(95),
     };
 

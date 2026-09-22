@@ -17,6 +17,11 @@ import {
 } from "./position";
 import type { OpenPosition, PositionFill } from "./types";
 
+// Exact value is arbitrary -- these tests care about entryTs being CARRIED
+// correctly (openPosition -> addToPosition -> the closed-trade shape in
+// process-bar.test.ts), not about a specific market timestamp.
+const TEST_ENTRY_TS = "2026-01-01T00:00:00Z";
+
 describe("openPosition", () => {
   it("long, 100 sh @ $150.00, $1.00 commission, stop $149.00, target $154.00", () => {
     const fill: PositionFill = {
@@ -28,6 +33,7 @@ describe("openPosition", () => {
       direction: "long",
       fill,
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(149),
       plannedTargetPrice: toPriceUnits(154),
     });
@@ -39,6 +45,7 @@ describe("openPosition", () => {
       quantity: toQuantityUnits(100),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(149),
       plannedTargetPrice: toPriceUnits(154),
     });
@@ -54,6 +61,7 @@ describe("openPosition", () => {
       direction: "short",
       fill,
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
     });
 
     if (!result.ok) throw new Error("expected an opened position");
@@ -70,6 +78,7 @@ describe("openPosition", () => {
         commission: toMoneyUnits(0),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
     });
 
     expect(result.ok).toBe(false);
@@ -86,6 +95,7 @@ describe("openPosition", () => {
         commission: toMoneyUnits(0),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(151),
     });
 
@@ -103,6 +113,7 @@ describe("openPosition", () => {
         commission: toMoneyUnits(0),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedTargetPrice: toPriceUnits(149),
     });
 
@@ -120,6 +131,7 @@ describe("openPosition", () => {
         commission: toMoneyUnits(0),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(149),
     });
 
@@ -137,6 +149,7 @@ describe("openPosition", () => {
         commission: toMoneyUnits(0),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedTargetPrice: toPriceUnits(151),
     });
 
@@ -158,6 +171,7 @@ describe("addToPosition", () => {
         commission: toMoneyUnits(1),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
     });
     if (!opened.ok) throw new Error("expected an opened position");
 
@@ -174,9 +188,10 @@ describe("addToPosition", () => {
     expect(fromPriceUnits(result.position.entryPrice)).toBe(152);
     expect(result.position.quantity).toBe(toQuantityUnits(200));
     expect(fromMoneyUnits(result.position.entryCommission)).toBe(2);
-    // Direction and entry engine version are untouched by an add.
+    // Direction, entry engine version, and entry timestamp are untouched by an add.
     expect(result.position.direction).toBe("long");
     expect(result.position.entryEngineVersion).toBe(ENGINE_VERSION);
+    expect(result.position.entryTs).toBe(TEST_ENTRY_TS);
   });
 
   it("rejects a zero quantity fill", () => {
@@ -188,6 +203,7 @@ describe("addToPosition", () => {
         commission: toMoneyUnits(1),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
     });
     if (!opened.ok) throw new Error("expected an opened position");
 
@@ -216,6 +232,7 @@ describe("partiallyClosePosition", () => {
         commission: toMoneyUnits(2),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(148),
     });
     if (!opened.ok) throw new Error("expected an opened position");
@@ -229,7 +246,8 @@ describe("partiallyClosePosition", () => {
       },
     });
     if (!result.ok) throw new Error("expected a partial close");
-    if (!result.closed.ok) throw new Error("expected the closed slice to price successfully");
+    if (!result.closed.ok)
+      throw new Error("expected the closed slice to price successfully");
 
     // Entry commission prorated to the closed 80/200 = 40% slice:
     // $2.00 x 80/200 = $0.80 exactly (divides evenly, see position-math.test.ts).
@@ -260,6 +278,7 @@ describe("partiallyClosePosition", () => {
         commission: toMoneyUnits(1),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       // No plannedStopPrice -- exercises the branch where position.ts does
       // NOT forward a stop into the engine's closePosition (position.ts:220).
     });
@@ -274,7 +293,8 @@ describe("partiallyClosePosition", () => {
       },
     });
     if (!result.ok) throw new Error("expected a partial close");
-    if (!result.closed.ok) throw new Error("expected the closed slice to price successfully");
+    if (!result.closed.ok)
+      throw new Error("expected the closed slice to price successfully");
 
     // Entry commission prorated to the closed 40/100 = 40% slice:
     // $1.00 x 40/100 = $0.40 exactly.
@@ -304,6 +324,7 @@ describe("partiallyClosePosition", () => {
         commission: toMoneyUnits(2),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
     });
     if (!opened.ok) throw new Error("expected an opened position");
 
@@ -330,6 +351,7 @@ describe("partiallyClosePosition", () => {
         commission: toMoneyUnits(2),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
     });
     if (!opened.ok) throw new Error("expected an opened position");
 
@@ -357,6 +379,7 @@ describe("partiallyClosePosition", () => {
         commission: toMoneyUnits(1),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(149),
     });
     if (!opened.ok) throw new Error("expected an opened position");
@@ -386,7 +409,8 @@ describe("partiallyClosePosition", () => {
     });
 
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("expected the engine's stop validation to reject this");
+    if (result.ok)
+      throw new Error("expected the engine's stop validation to reject this");
     expect(result.error.code).toBe("INVALID_STOP");
   });
 });
@@ -401,6 +425,7 @@ describe("fullyClosePosition", () => {
         commission: toMoneyUnits(1),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(149),
     });
     if (!opened.ok) throw new Error("expected an opened position");
@@ -414,7 +439,8 @@ describe("fullyClosePosition", () => {
       },
     });
     if (!result.ok) throw new Error("expected a full close");
-    if (!result.closed.ok) throw new Error("expected the closed position to price successfully");
+    if (!result.closed.ok)
+      throw new Error("expected the closed position to price successfully");
 
     expect(fromMoneyUnits(result.closed.grossPnl)).toBe(300);
     expect(fromMoneyUnits(result.closed.fees)).toBe(2);
@@ -431,6 +457,7 @@ describe("fullyClosePosition", () => {
         commission: toMoneyUnits(1),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       // No plannedStopPrice -- exercises the branch where position.ts does
       // NOT forward a stop into the engine's closePosition (position.ts:285).
     });
@@ -445,7 +472,8 @@ describe("fullyClosePosition", () => {
       },
     });
     if (!result.ok) throw new Error("expected a full close");
-    if (!result.closed.ok) throw new Error("expected the closed position to price successfully");
+    if (!result.closed.ok)
+      throw new Error("expected the closed position to price successfully");
 
     expect(fromMoneyUnits(result.closed.grossPnl)).toBe(300);
     expect(fromMoneyUnits(result.closed.fees)).toBe(2);
@@ -463,6 +491,7 @@ describe("fullyClosePosition", () => {
         commission: toMoneyUnits(1),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
     });
     if (!opened.ok) throw new Error("expected an opened position");
 
@@ -489,6 +518,7 @@ describe("fullyClosePosition", () => {
         commission: toMoneyUnits(1),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
     });
     if (!opened.ok) throw new Error("expected an opened position");
 
@@ -515,6 +545,7 @@ describe("fullyClosePosition", () => {
         commission: toMoneyUnits(1),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
     });
     if (!opened.ok) throw new Error("expected an opened position");
 
@@ -541,6 +572,7 @@ describe("fullyClosePosition", () => {
         commission: toMoneyUnits(1),
       },
       engineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(149),
     });
     if (!opened.ok) throw new Error("expected an opened position");
@@ -565,7 +597,8 @@ describe("fullyClosePosition", () => {
     });
 
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("expected the engine's stop validation to reject this");
+    if (result.ok)
+      throw new Error("expected the engine's stop validation to reject this");
     expect(result.error.code).toBe("INVALID_STOP");
   });
 });

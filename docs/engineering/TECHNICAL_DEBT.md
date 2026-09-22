@@ -106,6 +106,15 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Owner:** Christian
 - **Status:** open
 
+### TD-12 · `getOrCreateDefaultSimAccount` has no DB-level guard against a duplicate default `sim_account`
+- **Incurred:** M-11 Session 2, 2026-09-22
+- **Why:** `services/simulator/sim-accounts.ts`'s get-or-create does a `select` for an existing `is_default = true` row, then an `insert` if none is found — two round-trips, not one atomic operation. `sim_accounts` has no unique constraint (partial or otherwise) enforcing at most one `is_default` row per `user_id` (`20260917090000_create_sim_accounts.sql` doesn't have one; adding it wasn't asked for and would be a schema decision made silently mid-session). Two concurrent first-visits from the same signed-in user (e.g. two tabs opened at once) could both see "no existing row" and both insert.
+- **Risk if unpaid:** a user ends up with two `is_default = true` `sim_accounts` rows. `getOrCreateDefaultSimAccount`'s `.maybeSingle()` would then throw on the NEXT call (more than one row matches), turning a rare race into a hard error on a later visit. Low likelihood for a single interactive user in practice (this app has no multi-tab trading workflow), but a real gap, not a hypothetical one.
+- **Proposed fix:** a partial unique index (`create unique index ... on sim_accounts (user_id) where is_default`), in its own migration, plus switching the insert to `upsert`/`on conflict do nothing` and re-`select`ing on conflict. ~30 min.
+- **Trigger to pay:** before `/replay` (or any route using `getOrCreateDefaultSimAccount`) is used in a context where concurrent requests from one user are plausible — not blocking for a single-user class-window session.
+- **Owner:** Christian
+- **Status:** open
+
 ---
 
 ## Paid debt
