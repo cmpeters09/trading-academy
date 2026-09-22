@@ -238,9 +238,11 @@ function finishClose(
     // INVALID_STOP from Session 1's closePosition (position.ts flattens
     // closePosition's own `ok: false` into fullyClosePosition's outer
     // `ok: false` -- see its final few lines) -- e.g. a position whose
-    // plannedStopPrice ended up on the wrong side of entry (TD-08 is the
-    // real-world way that happens: an add-to that doesn't re-validate a
-    // carried-over stop).
+    // plannedStopPrice ended up on the wrong side of entry. TD-08 (paid)
+    // means `addToPosition` itself now rejects an add that would cause
+    // this, so reaching this branch means the position arrived here some
+    // other way (a hand-built fixture in tests; defensive coverage, not a
+    // reachable app path today).
     return {
       pendingOrder: null,
       position,

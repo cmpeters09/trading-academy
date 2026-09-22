@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { ENGINE_VERSION } from "@/lib/engine/types";
-import { toMoneyUnits, toPriceUnits, toQuantityUnits } from "@/lib/engine/units";
+import {
+  toMoneyUnits,
+  toPriceUnits,
+  toQuantityUnits,
+} from "@/lib/engine/units";
 
 import { computeUnrealizedPnl } from "./unrealized-pnl";
 import type { OpenPosition } from "./types";
@@ -86,10 +90,12 @@ describe("computeUnrealizedPnl", () => {
     expect(result.rMultiple).toBeNull();
   });
 
-  it("a planned stop on the WRONG side of entry (TD-08's reachable gap) -> rMultiple null, not a bad ratio", () => {
-    // Long, stop $105.00 is ABOVE the $100.00 entry -- invalid for a long,
-    // but this is display math, not a validator, so it must stay honest
-    // (null) rather than divide by a non-positive "risk."
+  it("a planned stop on the WRONG side of entry (defensive, TD-08 paid) -> rMultiple null, not a bad ratio", () => {
+    // Long, stop $105.00 is ABOVE the $100.00 entry -- invalid for a long.
+    // No longer reachable through normal use (openPosition/addToPosition
+    // both reject this now), but this is display math, not a validator,
+    // so it must stay honest (null) for whatever position it's handed
+    // rather than divide by a non-positive "risk."
     const position: OpenPosition = {
       direction: "long",
       entryPrice: toPriceUnits(100),

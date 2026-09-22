@@ -30,7 +30,19 @@ import type {
  *   (`position-math.ts`), entry commission accumulates. `entryTs`/
  *   `entryEngineVersion` are carried over unchanged (spread from the old
  *   position) -- both are stamped once, at open, same reasoning as
- *   `types.ts`'s `OpenPosition` doc comment.
+ *   `types.ts`'s `OpenPosition` doc comment. `plannedStopPrice` IS
+ *   re-validated against the NEW weighted-average entry price (TD-08,
+ *   paid) -- reuses `validateStop`, the same check `openPosition` runs,
+ *   just against the recomputed entry instead of the fill price. An add
+ *   that would leave the stop on the wrong side is rejected outright
+ *   (`INVALID_STOP`, §7 class 1 -- a typed result, never thrown); the
+ *   position is left unchanged, forcing the caller to clear/replace the
+ *   stop before retrying, per the fix this debt entry proposed.
+ *   `plannedTargetPrice` is deliberately NOT re-validated here -- the
+ *   engine never enforces a target's side at close time either (unlike
+ *   the stop, `closePosition`'s input has no `plannedTargetPrice` field
+ *   at all), so there is no equivalent downstream failure this would be
+ *   preventing; out of scope for this fix.
  * - `partiallyClosePosition` — an exit fill smaller than the open quantity.
  *   Realizes PnL/R for the closed slice only; the remaining position keeps
  *   its own fair share of entry commission (prorated by quantity), and
@@ -132,8 +144,12 @@ export function openPosition(input: OpenPositionInput): OpenPositionResult {
  * `direction` parameter -- a position's direction is fixed at
  * `openPosition` and adding more of the opposite side is a partial close,
  * not an add (`partiallyClosePosition`/`fullyClosePosition` below). Planned
- * stop/target are carried over unchanged; adjusting them is a separate
- * concern (order ticket UI, a later session) this reducer doesn't decide.
+ * stop/target VALUES are carried over unchanged -- adjusting them to a new
+ * price is a separate concern (order ticket UI, a later session) this
+ * reducer doesn't decide -- but a carried-over `plannedStopPrice` IS
+ * re-validated against the recomputed entry price (TD-08) and can reject
+ * the add outright; `plannedTargetPrice` is carried over with no such
+ * check (see this file's top-level doc comment for why).
  */
 export function addToPosition(input: AddToPositionInput): AddToPositionResult {
   const { position, fill } = input;
@@ -152,6 +168,21 @@ export function addToPosition(input: AddToPositionInput): AddToPositionResult {
     { price: position.entryPrice, quantity: position.quantity },
     { price: fill.fillPrice, quantity: fill.quantity },
   );
+
+  // TD-08: an add-to shifts the weighted-average entry price, which can
+  // strand a stop that was valid at the OLD entry on the wrong side of the
+  // NEW one. Same check openPosition runs, just re-run here against the
+  // recomputed entry -- reject the add rather than silently open a
+  // position with an invalid stop (mirrors closePosition's own INVALID_STOP
+  // enforcement, just moved earlier so it's caught at the add, not the
+  // eventual close).
+  const stopError = validateStop(
+    position.direction,
+    entryPrice,
+    position.plannedStopPrice,
+  );
+  if (stopError) return { ok: false, error: stopError };
+
   const quantity = (position.quantity + fill.quantity) as QuantityUnits;
   const entryCommission = (position.entryCommission +
     fill.commission) as MoneyUnits;

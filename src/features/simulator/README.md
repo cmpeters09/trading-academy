@@ -22,7 +22,11 @@ longer just a table nobody touches), and `entryTs`/`instrumentId`/
 `store.ts`/`ReplaySimulator` so a closed trade (`ClosedTrade`, richer
 shape as of this session) carries everything DATABASE_SCHEMA.md's
 `trades` row needs. Still no actual DB write of an order/execution/trade
-— that's M-11 Session 3/4 (the `validate-trade` Edge Function).
+— that's M-11 Session 3/4 (the `validate-trade` Edge Function). Between
+Sessions 2 and 3, a debt-register audit paid TD-08's stop half:
+`addToPosition` now re-validates a carried-over `plannedStopPrice`
+against the new weighted-average entry price and rejects the add
+(`INVALID_STOP`) rather than letting it drift invalid.
 
 ## Architecture
 
@@ -164,8 +168,10 @@ shape as of this session) carries everything DATABASE_SCHEMA.md's
   net (Q3 in this session's plan) — `PositionPanel` labels it "before exit
   costs" rather than show a number that quietly assumes a guessed exit
   fee. `rMultiple` is `null` both when there's no planned stop AND when
-  one sits on the wrong side of entry (TD-08's reachable gap) — display
-  math stays honest rather than showing a nonsensical ratio.
+  one sits on the wrong side of entry — no longer reachable through
+  normal use since TD-08 was paid (`openPosition`/`addToPosition` both
+  reject that now), but this is display math, not a validator, so the
+  defensive check stays rather than trusting the caller.
 - **`components/PositionPanel.tsx`** (Session 3, unrealized PnL/R and the
   close button added Session 4) — switches between the order ticket
   (flat), a "pending, waiting for the next bar" status, and the
@@ -260,18 +266,15 @@ fullyClosePosition(input: ClosePositionInput) -> FullCloseResult
 
 ## Known limitations
 
-- **`addToPosition` does not re-validate a carried-over planned stop or
-  target against the new weighted-average entry price** (TD-08). A stop
-  that was valid when the position opened can become invalid after an add
-  that moves the average entry price past it (e.g. adding to a long at a
-  much lower price can leave the stop above the new entry). This surfaces
-  as the engine's own `INVALID_STOP` the next time the position is closed
-  (`partiallyClosePosition`/`fullyClosePosition`), not at the moment the
-  add happens — see `lib/position.test.ts`'s "bubbles the engine's
-  INVALID_STOP" cases for the exact scenario. A future session should
-  decide the product behavior here (reject the add? clear the stop?
-  require the caller to supply a new one?) rather than this session
-  guessing.
+- **`addToPosition` does not re-validate a carried-over planned TARGET
+  against the new weighted-average entry price** (TD-08's target half is
+  intentionally still open — see below; the STOP half was paid M-11 debt
+  audit). A target that was valid when the position opened can end up on
+  the wrong side of the entry after an add moves it, and nothing catches
+  that — but the engine never enforces a target's side at close time
+  either (`closePosition`'s input has no `plannedTargetPrice` field), so
+  there's no downstream failure this would be closing a gap for, unlike
+  the stop.
 - **`sim_accounts.balance` is still never read or written.**
   `getOrCreateDefaultSimAccount` (M-11 Session 2) reads/creates the row
   and its `balance` column exists, but nothing in the simulator marks
@@ -301,9 +304,9 @@ fullyClosePosition(input: ClosePositionInput) -> FullCloseResult
 - **Only one order/position at a time.** `useSimulatorStore.submitOrder`
   is a no-op while a pending order or open position already exists, and
   `PositionPanel` hides the ticket in both states — `addToPosition`
-  (Session 1) is never called from the UI (TD-08's trigger still hasn't
-  fired). Adding to, or partially closing, an open position isn't
-  possible from this UI yet.
+  (Session 1, stop re-validation added M-11 debt audit) is never called
+  from the UI. Adding to, or partially closing, an open position isn't
+  possible from this UI yet; no session has scheduled that UI work.
 - **`OrderTicket`, `PositionPanel`, `ReplaySimulator`, and
   `SizeByRiskFields` have no component tests yet** (TD-09). The
   validation/domain logic they depend on (`orderTicketSchema`,

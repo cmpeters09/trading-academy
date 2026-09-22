@@ -40,11 +40,15 @@ export type PositionFill = {
  * a newer engine version. A position's *entry* identity is set at open.
  *
  * `plannedStopPrice`/`plannedTargetPrice` are each independently optional
- * and validated only against `entryPrice` at the moment they're set
- * (`openPosition`) — `addToPosition` does not re-validate a carried-over
- * stop/target against the position's new weighted-average entry price. See
- * the feature README's "Known limitations" for why that's a real, named
- * gap rather than an oversight.
+ * and validated against `entryPrice` at the moment they're set
+ * (`openPosition`) — `addToPosition` (TD-08, paid) re-validates
+ * `plannedStopPrice` again against the NEW weighted-average entry price
+ * and rejects the add (`INVALID_STOP`) if it would strand the stop on the
+ * wrong side, rather than silently carrying an invalid one forward.
+ * `plannedTargetPrice` is NOT re-validated by `addToPosition` — the engine
+ * never enforces a target's side at close time either (`closePosition`'s
+ * input has no `plannedTargetPrice` field), so there is no downstream
+ * failure this would be closing a gap for.
  *
  * `entryTs` (M-11 Session 2) is the bar timestamp of the fill that OPENED
  * this position (market time, not wall clock -- matches every other `ts`

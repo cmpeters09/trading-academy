@@ -22,12 +22,13 @@ export type UnrealizedPnl = {
  *
  * `rMultiple` is `null` when there's no planned stop to measure against
  * (same convention as `closePosition`), AND when a planned stop happens
- * to sit on the wrong side of entry -- reachable for real (TD-08:
- * `addToPosition` doesn't re-validate a carried-over stop against a new
- * weighted-average entry price), and this is display-only math, not a
- * domain result that can reject anything (§7 class 1), so it stays
- * honest by reporting "no meaningful R" rather than a nonsensical or
- * inverted ratio.
+ * to sit on the wrong side of entry -- no longer reachable through normal
+ * use since TD-08 was paid (`openPosition`/`addToPosition` both now
+ * reject a stop on the wrong side of entry before a position can hold
+ * one), but this is display-only math, not a domain result that can
+ * reject anything (§7 class 1), so the defensive branch stays: it reports
+ * "no meaningful R" rather than a nonsensical or inverted ratio for
+ * whatever position it's handed, instead of trusting the caller.
  */
 export function computeUnrealizedPnl(
   position: OpenPosition,

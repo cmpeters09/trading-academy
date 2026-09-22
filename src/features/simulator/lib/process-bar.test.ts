@@ -877,12 +877,14 @@ describe("processBar -- defensive: malformed brackets/positions surface a typed 
     // A valid bracket (stop $105 < target $110 -- resolveBracket accepts
     // it) but an invalid STOP relative to the $100 entry (must be BELOW
     // entry for a long) -- the exact "bubbles the engine's INVALID_STOP"
-    // case Session 1's position.test.ts documents, reachable here via a
-    // hand-built fixture the same way an addToPosition (TD-08) could
-    // produce one for real. fullyClosePosition flattens this into its own
-    // OUTER `ok: false` (position.ts) rather than an inner `closed.ok:
-    // false` -- see process-bar.ts's comment on why the inner check is
-    // unreachable.
+    // case Session 1's position.test.ts documents, reachable here only via
+    // a hand-built fixture: TD-08 (paid) means `addToPosition` itself now
+    // rejects an add that would produce this, so this isn't a reachable
+    // app path today, just defensive coverage for however a position
+    // could otherwise end up here. fullyClosePosition flattens this into
+    // its own OUTER `ok: false` (position.ts) rather than an inner
+    // `closed.ok: false` -- see process-bar.ts's comment on why the inner
+    // check is unreachable.
     const invalidStopPosition: OpenPosition = {
       direction: "long",
       entryPrice: toPriceUnits(100),
