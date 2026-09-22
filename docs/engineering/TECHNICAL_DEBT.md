@@ -72,6 +72,7 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Risk if unpaid:** `balance` changes on every fill/trade close (M-9 Sessions 2+, M-11), but nothing records *when* the most recent change happened — no auditability for "why is this balance what it is right now," and no cheap way to sort/debug accounts by recent activity without scanning `orders`/`trades`.
 - **Proposed fix:** A small follow-up migration adding `updated_at timestamptz not null default now()` to `sim_accounts` (and, while there, `orders`) plus a trigger to bump it on update — same pattern as `profiles`/`user_settings`. ~15 min. Decide at the same time whether DATABASE_SCHEMA.md's shown SQL should be corrected to match (doc fix, not a silent one).
 - **Trigger to pay:** Before M-9 Session 2 starts writing balance-mutating logic (order fills against a `sim_account`), so the gap doesn't widen further before it's addressed.
+- **Update, M-11 Session 1, 2026-09-22:** The same gap is now built into three more tables, matching DATABASE_SCHEMA.md's shown SQL exactly rather than silently fixed: `orders` and `executions` (predicted by this entry's own "orders has the same gap... executions has neither column" line) and, newly noticed, `trades` — it has `created_at` but no `updated_at` despite `deleted_at` (ADR-011 soft delete) being a later mutation with nothing recording when it happened. Still open; still unpaid.
 - **Owner:** Christian
 - **Status:** open
 
@@ -93,6 +94,15 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Proposed fix:** Add `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`, and `jsdom` as dev dependencies (pinned exact per §25); configure a jsdom environment for component test files (a per-file `// @vitest-environment jsdom` override keeps the existing pure-logic tests fast/Node-only); write component tests for `OrderTicket` covering conditional field visibility, inline error rendering with correct `aria-describedby` wiring, and a successful submit producing the right `OrderTicketSubmission`. ~1-2h including the one-time infra setup.
 - **Trigger to pay:** Before Session 4 (position-sizing helper) adds more interactive logic to this feature, or before any other feature needs the same infra — whichever comes first. Not blocking Session 3.
 - **Update, M-9 Session 3, 2026-09-18:** `PositionPanel` and `ReplaySimulator` (new this session) have the same gap — verified only by typecheck/lint and a manual, live browser pass (market buy -> step forward -> fill -> position readout, both themes, no console errors), not automated tests. Same infra would cover all of them at once; the trigger is unchanged.
+- **Owner:** Christian
+- **Status:** open
+
+### TD-11 · No automated RLS isolation test yet for orders/executions/trades/trade_orders
+- **Incurred:** M-11 Session 1, 2026-09-22
+- **Why:** ADR-010/§14 require an integration test proving user A cannot read user B's rows, run via Vitest against `supabase start`'s local dev stack. That stack is Docker-based, and Docker isn't installed in this environment. Rather than skip the requirement silently, or write the test against the real hosted project (mixing throwaway test accounts into a production-track project and touching signup, which TD-04 already flagged as fragile for disposable test emails), the test itself is deferred here — the RLS *policies* are not: `20260922142658_create_trade_persistence_tables.sql` ships SELECT-own-only policies (no INSERT/UPDATE for `authenticated`) on all four tables, matching ADR-012's default-deny model exactly, the same pattern already used (and already tested-by-inspection-only) for `sim_accounts`/`profiles`. ENGINEERING_PRINCIPLES §26's never-take list forbids *skipping* RLS — this entry defers proving it, not doing it.
+- **Risk if unpaid:** the policies are believed correct by inspection but unverified by an actual cross-user read attempt. If a policy has a typo or a wrong `auth.uid()` comparison, nothing currently catches it before Session 4's Edge Function starts writing real trade data other users could then read.
+- **Proposed fix:** install Docker, run `supabase start`, apply this migration locally, and write a Vitest integration test that signs in as two test users and asserts each of `orders`/`executions`/`trades`/`trade_orders` is unreadable cross-user. ~1h once Docker is available.
+- **Trigger to pay:** before M-11 Session 4 (the Edge Function that writes real trades) is merged — not "someday." The write path must not go live against unverified policies.
 - **Owner:** Christian
 - **Status:** open
 
