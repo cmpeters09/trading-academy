@@ -8,20 +8,25 @@ data, track open positions, and realize PnL/R-multiple on close
 realistic simulations). Feeds the journal (M-9 later sessions) and stats
 dashboards once trades persist.
 
-**Status: Session 4 of ~4 (in progress) — making the keystone usable and
-closing out M-9's debt.** Session 1 was `sim_accounts` and pure
-account/order/position *state logic*. Session 2 added the order-entry
-panel. Session 3 wired order → engine → position end to end. Session 4,
-sub-session A: a risk-% position-sizing helper (`/lib/engine`'s
-`computePositionSize`) wired into `OrderTicket` as an optional "size by
-risk" section that live-fills `quantity`. Sub-session B: the open-position
-readout now shows unrealized PnL/R, marked to the latest revealed bar and
-updating live as replay advances. Sub-session C: TD-10 paid — a manual
-"Close position" button (queued the same way an entry fills, at the NEXT
-bar's open) and honest single-leg exits (a position with only a stop or
-only a target now actually auto-exits, reusing `fillStopOrder`/
-`fillLimitOrder` directly instead of faking a second bracket leg). Still
-to come this session: close-out (D). Still no persistence to the DB.
+**Status: M-9 (Simulator UI) shipped. M-11 (Trade Persistence) Session 2
+of ~6 in progress.** M-9 built `sim_accounts` and the full pending-order →
+fill → open position → close lifecycle, entirely in-memory (Zustand),
+including risk-% position sizing, live unrealized PnL/R, and TD-10's
+manual close + honest single-leg exits. M-11 Session 1 added the
+`orders`/`executions`/`trades`/`trade_orders` tables + RLS (writes
+Edge-Function-only, TD-11 tracks the still-missing automated RLS test).
+M-11 Session 2 (this one): `services/simulator/sim-accounts.ts`'s
+`getOrCreateDefaultSimAccount` (real `sim_accounts` read/insert, no
+longer just a table nobody touches), and `entryTs`/`instrumentId`/
+`simAccountId` threaded through `OpenPosition`/`process-bar.ts`/
+`store.ts`/`ReplaySimulator` so a closed trade (`ClosedTrade`, richer
+shape as of this session) carries everything DATABASE_SCHEMA.md's
+`trades` row needs. Still no actual DB write of an order/execution/trade
+— that's M-11 Session 3/4 (the `validate-trade` Edge Function). Between
+Sessions 2 and 3, a debt-register audit paid TD-08's stop half:
+`addToPosition` now re-validates a carried-over `plannedStopPrice`
+against the new weighted-average entry price and rejects the add
+(`INVALID_STOP`) rather than letting it drift invalid.
 
 ## Architecture
 
@@ -31,13 +36,26 @@ to come this session: close-out (D). Still no persistence to the DB.
   delete policy yet (out of scope; default-deny until a deliberate decision
   is made). This table unblocks TD-06 (`replay_sessions`' FK), which is
   still not built.
+- **`services/simulator/sim-accounts.ts`** (M-11 Session 2, not in this
+  feature — services are cross-cutting, §6) — `getOrCreateDefaultSimAccount`,
+  called from `/replay/page.tsx` (a Server Component). Returns the user's
+  `is_default` `sim_account`, creating one (starting/current balance
+  $100,000, per DATABASE_SCHEMA.md's default) on first visit. Returns
+  `null` only when nobody's signed in — normally unreachable, since
+  `src/proxy.ts` (Next.js 16's renamed middleware convention) already
+  redirects an unauthenticated visit to `/login`; this covers the small
+  race window between that check and the page's own `getUser()` call.
+  Known gap (TD-12): no DB-level unique constraint stops two concurrent
+  first-visits from both inserting a default account.
 - **`lib/types.ts`** — every type this feature's pure logic needs:
   `PositionFill` (the `{ fillPrice, quantity, commission }` a caller
   extracts from any `/lib/engine` fill result before handing it to this
-  module), `OpenPosition` (the position shape itself), and the
-  input/result type for each transition below. Following `/lib/engine`'s
-  own convention, all types live here — `position.ts`/`position-math.ts`
-  only import and implement.
+  module), `OpenPosition` (the position shape itself, plus `entryTs` as of
+  M-11 Session 2), `TradeContext` (M-11 Session 2 — which instrument/
+  `sim_account` the session trades, threaded through `processBar` only to
+  stamp a closed trade), and the input/result type for each transition
+  below. Following `/lib/engine`'s own convention, all types live here —
+  `position.ts`/`position-math.ts` only import and implement.
 - **`lib/position-math.ts`** — the two integer-only calculations
   `/lib/engine` doesn't provide because it has no running position state
   (its README says so explicitly): `weightedAverageEntryPrice` (for
@@ -99,36 +117,49 @@ to come this session: close-out (D). Still no persistence to the DB.
   (DATABASE_SCHEMA.md §4) — this is an app-wide default until a later
   session makes it one.
 - **`lib/process-bar.ts`** (Session 3, manual close + single-leg exits
-  added Session 4) — the keystone: `processBar(state, bar, config) ->
-  result`, pure. Given the simulator's current pending order / open
-  position / close request and one revealed bar, reuses `/lib/engine`'s
-  fill functions, `resolveBracket` (bar-path ambiguity, RISKS R-3), and
-  `finishClose` (this module's own shared "apply `fullyClosePosition` and
-  unwrap its double-nested result" helper) — never re-derives fill or PnL
-  math. A filled order becomes an open position via `openPosition`. An
-  open position can then exit four ways: a manual close request
-  (`closeRequested`, TD-10 — takes PRIORITY over everything else, fills
-  at THIS bar's open via `fillMarketOrder`, same as an entry); a complete
-  bracket (both planned stop AND target) via `resolveBracket`; a stop-only
-  position via `fillStopOrder` directly (the closing side, opposite of
-  the entry side); or a target-only position via `fillLimitOrder`
-  directly. No same-bar exit check on the bar a position just opened on
-  (a daily bar's OHLC has no sub-bar ordering info — see the module's own
-  doc comment). Re-visited bars (step back, then forward again) can't
-  double-fill or double-close: a fill/close clears `pendingOrder`/
-  `closeRequested`, and a no-outcome check is idempotent — verified both
-  by unit test and live in a browser.
-- **`store.ts`** (Session 3, `lastPrice`/`requestClose` added Session 4) —
-  `useSimulatorStore` (ADR-005: ephemeral client state, one store per
-  feature). Holds `pendingOrder` / `position` / `lastClosedTrade` /
-  `orderError` / `lastPrice` / `closeRequested`; `submitOrder`,
-  `requestClose`, and `onBarRevealed` are thin delegates to Session 1's
-  reducer and `process-bar.ts` — all the actual logic lives in `lib/`,
-  same split as `features/replay/store.ts`. `lastPrice` is set to every
-  revealed bar's close, independent of whether that bar caused a fill —
-  it's the mark price `PositionPanel` uses for unrealized PnL/R.
+  added Session 4, `context` param added M-11 Session 2) — the keystone:
+  `processBar(state, bar, config, context) -> result`, pure. Given the
+  simulator's current pending order / open position / close request and
+  one revealed bar, reuses `/lib/engine`'s fill functions, `resolveBracket`
+  (bar-path ambiguity, RISKS R-3), and `finishClose` (this module's own
+  shared "apply `fullyClosePosition`, unwrap its double-nested result, and
+  assemble the richer `ClosedTrade`" helper) — never re-derives fill or
+  PnL math. A filled order becomes an open position via `openPosition`,
+  stamped with `entryTs` from the fill bar. An open position can then exit
+  four ways: a manual close request (`closeRequested`, TD-10 — takes
+  PRIORITY over everything else, fills at THIS bar's open via
+  `fillMarketOrder`, same as an entry); a complete bracket (both planned
+  stop AND target) via `resolveBracket`; a stop-only position via
+  `fillStopOrder` directly (the closing side, opposite of the entry side);
+  or a target-only position via `fillLimitOrder` directly. Every exit
+  path assembles a `ClosedTrade` (M-11 Session 2 — everything
+  DATABASE_SCHEMA.md's `trades` row needs: `instrumentId`/`simAccountId`
+  from `context`, `entryTs` from the position, `exitTs` from the closing
+  bar, `avgEntry`/`avgExit`/`quantity`/`plannedStop`/`plannedTarget`
+  alongside the engine's own realized PnL/R fields) via `finishClose`. No
+  same-bar exit check on the bar a position just opened on (a daily bar's
+  OHLC has no sub-bar ordering info — see the module's own doc comment).
+  Re-visited bars (step back, then forward again) can't double-fill or
+  double-close: a fill/close clears `pendingOrder`/`closeRequested`, and a
+  no-outcome check is idempotent — verified both by unit test and live in
+  a browser.
+- **`store.ts`** (Session 3, `lastPrice`/`requestClose` added Session 4,
+  `instrumentId`/`simAccountId` added M-11 Session 2) — `useSimulatorStore`
+  (ADR-005: ephemeral client state, one store per feature). Holds
+  `pendingOrder` / `position` / `lastClosedTrade` / `orderError` /
+  `lastPrice` / `closeRequested` / `instrumentId` / `simAccountId`;
+  `submitOrder`, `requestClose`, and `onBarRevealed` are thin delegates to
+  Session 1's reducer and `process-bar.ts` — all the actual logic lives
+  in `lib/`, same split as `features/replay/store.ts`. `lastPrice` is set
+  to every revealed bar's close, independent of whether that bar caused a
+  fill — it's the mark price `PositionPanel` uses for unrealized PnL/R.
   `requestClose` (TD-10) is a no-op unless a position is open and no
-  close is already requested.
+  close is already requested. `reset(context: TradeContext)` (M-11
+  Session 2, signature changed from a no-arg `reset()`) resets to flat AND
+  (re)stamps which instrument/account the session trades; `onBarRevealed`
+  throws if it somehow runs before `instrumentId`/`simAccountId` are set
+  (unreachable in normal operation — `ReplaySimulator` always syncs them
+  first).
 - **`lib/unrealized-pnl.ts`** (Session 4) — `computeUnrealizedPnl`. Same
   gross-PnL formula as Session 1's `closePosition` (`priceQuantityToMoney`
   on the price delta, reused, never re-derived), marked against
@@ -137,8 +168,10 @@ to come this session: close-out (D). Still no persistence to the DB.
   net (Q3 in this session's plan) — `PositionPanel` labels it "before exit
   costs" rather than show a number that quietly assumes a guessed exit
   fee. `rMultiple` is `null` both when there's no planned stop AND when
-  one sits on the wrong side of entry (TD-08's reachable gap) — display
-  math stays honest rather than showing a nonsensical ratio.
+  one sits on the wrong side of entry — no longer reachable through
+  normal use since TD-08 was paid (`openPosition`/`addToPosition` both
+  reject that now), but this is display math, not a validator, so the
+  defensive check stays rather than trusting the caller.
 - **`components/PositionPanel.tsx`** (Session 3, unrealized PnL/R and the
   close button added Session 4) — switches between the order ticket
   (flat), a "pending, waiting for the next bar" status, and the
@@ -149,13 +182,20 @@ to come this session: close-out (D). Still no persistence to the DB.
   summary next to the ticket (§7: inline, never a toast). Unrealized
   PnL/R is colored (`text-success`/`text-danger`) but always paired with
   an explicit `+`/`-` sign, never color alone (§11).
-- **`components/ReplaySimulator.tsx`** (Session 3) — mounts `PositionPanel`
+- **`components/ReplaySimulator.tsx`** (Session 3, `instrumentId`/
+  `simAccountId` props added M-11 Session 2) — mounts `PositionPanel`
   next to replay's `ReplayChart`, wiring `onBarRevealed` (M-10's
   mechanism) straight to `useSimulatorStore`. Lives here, not in
   `replay/`, so `replay` stays feature-agnostic to trading orders (§16) —
   this is simulator consuming replay's public surface, never a deep
   import. `"use client"` stays at this leaf; `/replay/page.tsx` above it
-  is still a Server Component.
+  is still a Server Component (now also resolving the sim account via
+  `getOrCreateDefaultSimAccount`). Syncs the store's `instrumentId`/
+  `simAccountId` (and resets on either changing, same as a candle-array
+  change) by comparing props against the STORE's own values during
+  render, not a separate local mirror — the only way this also fires
+  correctly on first mount, which is what lets `onBarRevealed`'s
+  null-context guard be unreachable in practice.
 - **`/lib/engine/position-sizing.ts`** (Session 4, NOT in this feature —
   see its own file) — `computePositionSize`. GLOSSARY.md "Position
   sizing": `quantity = (accountBalance x riskPct) / |entryPrice -
@@ -200,6 +240,8 @@ fullyClosePosition(input: ClosePositionInput) -> FullCloseResult
   candles={candles}
   instrumentLabel={instrument.symbol}
   timeframeLabel="1 day"
+  instrumentId={instrument.id}
+  simAccountId={simAccount.id}
 />
 ```
 
@@ -224,24 +266,31 @@ fullyClosePosition(input: ClosePositionInput) -> FullCloseResult
 
 ## Known limitations
 
-- **`addToPosition` does not re-validate a carried-over planned stop or
-  target against the new weighted-average entry price** (TD-08). A stop
-  that was valid when the position opened can become invalid after an add
-  that moves the average entry price past it (e.g. adding to a long at a
-  much lower price can leave the stop above the new entry). This surfaces
-  as the engine's own `INVALID_STOP` the next time the position is closed
-  (`partiallyClosePosition`/`fullyClosePosition`), not at the moment the
-  add happens — see `lib/position.test.ts`'s "bubbles the engine's
-  INVALID_STOP" cases for the exact scenario. A future session should
-  decide the product behavior here (reject the add? clear the stop?
-  require the caller to supply a new one?) rather than this session
-  guessing.
-- **No `sim_accounts` balance logic yet.** This session is table + RLS
-  only; nothing reads or writes `balance` (a later, persistence session).
-- **No order lifecycle (`orders`/`executions` tables) yet.** Nothing here
-  is written to the DB — `processBar` only mutates in-memory Zustand
-  state; deciding *whether* an order fills is entirely `/lib/engine`'s job
-  (ADR-007), not this module's.
+- **`addToPosition` does not re-validate a carried-over planned TARGET
+  against the new weighted-average entry price** (TD-08's target half is
+  intentionally still open — see below; the STOP half was paid M-11 debt
+  audit). A target that was valid when the position opened can end up on
+  the wrong side of the entry after an add moves it, and nothing catches
+  that — but the engine never enforces a target's side at close time
+  either (`closePosition`'s input has no `plannedTargetPrice` field), so
+  there's no downstream failure this would be closing a gap for, unlike
+  the stop.
+- **`sim_accounts.balance` is still never read or written.**
+  `getOrCreateDefaultSimAccount` (M-11 Session 2) reads/creates the row
+  and its `balance` column exists, but nothing in the simulator marks
+  against it, deducts a loss, or credits a gain — that's persistence
+  (M-11 Session 4+), when a validated trade actually settles.
+- **No order lifecycle (`orders`/`executions`/`trades` tables) yet.**
+  Nothing here is written to the DB — `processBar` only mutates in-memory
+  Zustand state, now enriched with everything a `trades` row needs
+  (`ClosedTrade`, M-11 Session 2) but not yet sent anywhere; deciding
+  *whether* an order fills is entirely `/lib/engine`'s job (ADR-007), not
+  this module's, and *persisting* a fill is the `validate-trade` Edge
+  Function's job (M-11 Session 3/4), not this module's either.
+- **`replaySessionId` is never set.** `ClosedTrade` has no such field —
+  `replay_sessions` doesn't exist yet (TD-06, still open); every trade
+  this milestone eventually persists gets `replay_session_id = null` at
+  the point Session 4/5 actually writes it.
 - **A market order's planned stop/target are only checked against each
   other at submit time, not against a real entry price** (Session 2,
   still true). `orderTicketSchema` has no fill price to validate against
@@ -255,9 +304,9 @@ fullyClosePosition(input: ClosePositionInput) -> FullCloseResult
 - **Only one order/position at a time.** `useSimulatorStore.submitOrder`
   is a no-op while a pending order or open position already exists, and
   `PositionPanel` hides the ticket in both states — `addToPosition`
-  (Session 1) is never called from the UI (TD-08's trigger still hasn't
-  fired). Adding to, or partially closing, an open position isn't
-  possible from this UI yet.
+  (Session 1, stop re-validation added M-11 debt audit) is never called
+  from the UI. Adding to, or partially closing, an open position isn't
+  possible from this UI yet; no session has scheduled that UI work.
 - **`OrderTicket`, `PositionPanel`, `ReplaySimulator`, and
   `SizeByRiskFields` have no component tests yet** (TD-09). The
   validation/domain logic they depend on (`orderTicketSchema`,

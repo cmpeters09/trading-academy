@@ -13,12 +13,13 @@ import type {
   MarketFillResult,
   MoneyUnits,
   PriceUnits,
+  QuantityUnits,
   StopFillResult,
 } from "@/lib/engine/types";
 
 import { fullyClosePosition, openPosition } from "./position";
 import { toEngineOrder } from "./to-engine-order";
-import type { OpenPosition, PositionFill } from "./types";
+import type { OpenPosition, PositionFill, TradeContext } from "./types";
 import type { OrderTicketSubmission } from "./order-ticket-schema";
 
 export type SimulatorBarState = {
@@ -36,8 +37,40 @@ export type SimulatorBarState = {
   closeRequested: boolean;
 };
 
-/** A completed round-trip that priced successfully — never the `ok: false` half of `ClosedPositionResult`. */
-export type ClosedTrade = Extract<ClosedPositionResult, { ok: true }>;
+/** The engine's own realized-PnL/R-multiple result — never the `ok: false` half of `ClosedPositionResult`. */
+type EnginePriced = Extract<ClosedPositionResult, { ok: true }>;
+
+/**
+ * A completed round-trip with everything DATABASE_SCHEMA.md's `trades` row
+ * needs (M-11 Session 2) -- `EnginePriced`'s realized PnL/R fields, plus the
+ * position/fill/bar/context facts that priced them: which instrument and
+ * `sim_account`, direction, entry/exit timestamps and prices, quantity, and
+ * the planned stop/target (if any) the trade was actually risked against.
+ * Field names deliberately mirror the `trades` table 1:1 (`avgEntry` ->
+ * `avg_entry`, etc.) so the validate-trade Edge Function payload (Session
+ * 4/5) is close to a direct pass-through, not a second translation layer.
+ * `id`/`user_id`/`created_at`/`deleted_at` aren't here -- server-assigned,
+ * never decided client-side. `replaySessionId` isn't here either -- TD-06,
+ * every trade this milestone writes gets it as `null` at the point Session
+ * 5 actually persists, not carried through this pure layer.
+ */
+export type ClosedTrade = {
+  instrumentId: string;
+  simAccountId: string;
+  direction: "long" | "short";
+  entryTs: string;
+  exitTs: string;
+  avgEntry: PriceUnits;
+  avgExit: PriceUnits;
+  quantity: QuantityUnits;
+  grossPnl: MoneyUnits;
+  fees: MoneyUnits;
+  netPnl: MoneyUnits;
+  rMultiple: number | null;
+  plannedStop?: PriceUnits;
+  plannedTarget?: PriceUnits;
+  engineVersion: string;
+};
 
 export type ProcessBarResult = SimulatorBarState & {
   /** The trade that closed on THIS bar, or `null` if nothing closed. */
@@ -125,7 +158,9 @@ function tryFillPendingOrder(
   config: EngineConfig,
 ): ProcessBarResult {
   const engineOrder = toEngineOrder(pendingOrder);
-  const normalized = normalizeFillResult(fillPendingOrder(engineOrder, bar, config));
+  const normalized = normalizeFillResult(
+    fillPendingOrder(engineOrder, bar, config),
+  );
 
   if (!normalized.ok) {
     // A structurally invalid order (shouldn't happen given orderTicketSchema's
@@ -152,6 +187,7 @@ function tryFillPendingOrder(
     direction: pendingOrder.direction,
     fill,
     engineVersion: normalized.fill.engineVersion,
+    entryTs: bar.ts,
     ...(pendingOrder.plannedStopPrice !== undefined
       ? { plannedStopPrice: pendingOrder.plannedStopPrice }
       : {}),
@@ -183,9 +219,18 @@ function tryFillPendingOrder(
  * shared by every way a position can close (complete bracket, single-leg
  * exit, manual close). Never called with a fill the caller hasn't already
  * decided is real; this function's only job is applying Session 1's
- * `fullyClosePosition` and unwrapping its double-nested result correctly.
+ * `fullyClosePosition`, unwrapping its double-nested result correctly, and
+ * (M-11 Session 2) assembling the result into the richer `ClosedTrade`
+ * shape a `trades` row needs -- `bar.ts` is the exit timestamp (this IS the
+ * bar the exit fill happened on, for every caller); `position.entryTs` is
+ * the entry timestamp, carried since `openPosition`/`addToPosition`.
  */
-function finishClose(position: OpenPosition, fill: PositionFill): ProcessBarResult {
+function finishClose(
+  position: OpenPosition,
+  fill: PositionFill,
+  bar: EngineBar,
+  context: TradeContext,
+): ProcessBarResult {
   const closeResult = fullyClosePosition({ position, fill });
 
   if (!closeResult.ok) {
@@ -193,9 +238,11 @@ function finishClose(position: OpenPosition, fill: PositionFill): ProcessBarResu
     // INVALID_STOP from Session 1's closePosition (position.ts flattens
     // closePosition's own `ok: false` into fullyClosePosition's outer
     // `ok: false` -- see its final few lines) -- e.g. a position whose
-    // plannedStopPrice ended up on the wrong side of entry (TD-08 is the
-    // real-world way that happens: an add-to that doesn't re-validate a
-    // carried-over stop).
+    // plannedStopPrice ended up on the wrong side of entry. TD-08 (paid)
+    // means `addToPosition` itself now rejects an add that would cause
+    // this, so reaching this branch means the position arrived here some
+    // other way (a hand-built fixture in tests; defensive coverage, not a
+    // reachable app path today).
     return {
       pendingOrder: null,
       position,
@@ -221,11 +268,32 @@ function finishClose(position: OpenPosition, fill: PositionFill): ProcessBarResu
       error: closeResult.closed.error,
     };
   }
+  const closed: EnginePriced = closeResult.closed;
   return {
     pendingOrder: null,
     position: null,
     closeRequested: false,
-    closedTrade: closeResult.closed,
+    closedTrade: {
+      instrumentId: context.instrumentId,
+      simAccountId: context.simAccountId,
+      direction: position.direction,
+      entryTs: position.entryTs,
+      exitTs: bar.ts,
+      avgEntry: position.entryPrice,
+      avgExit: fill.fillPrice,
+      quantity: fill.quantity,
+      grossPnl: closed.grossPnl,
+      fees: closed.fees,
+      netPnl: closed.netPnl,
+      rMultiple: closed.rMultiple,
+      ...(position.plannedStopPrice !== undefined
+        ? { plannedStop: position.plannedStopPrice }
+        : {}),
+      ...(position.plannedTargetPrice !== undefined
+        ? { plannedTarget: position.plannedTargetPrice }
+        : {}),
+      engineVersion: closed.engineVersion,
+    },
     error: null,
   };
 }
@@ -253,6 +321,7 @@ function tryResolveBracket(
   },
   bar: EngineBar,
   config: EngineConfig,
+  context: TradeContext,
 ): ProcessBarResult {
   const bracketOrder: BracketOrder = {
     direction: position.direction,
@@ -275,11 +344,16 @@ function tryResolveBracket(
     return unchanged({ pendingOrder: null, position, closeRequested: false });
   }
 
-  return finishClose(position, {
-    fillPrice: bracketResult.fillPrice,
-    quantity: position.quantity,
-    commission: bracketResult.commission,
-  });
+  return finishClose(
+    position,
+    {
+      fillPrice: bracketResult.fillPrice,
+      quantity: position.quantity,
+      commission: bracketResult.commission,
+    },
+    bar,
+    context,
+  );
 }
 
 /**
@@ -297,6 +371,7 @@ function tryExitOnStopOnly(
   position: OpenPosition & { plannedStopPrice: PriceUnits },
   bar: EngineBar,
   config: EngineConfig,
+  context: TradeContext,
 ): ProcessBarResult {
   const closingOrder: EngineOrder = {
     side: closingSide(position.direction),
@@ -319,11 +394,16 @@ function tryExitOnStopOnly(
     return unchanged({ pendingOrder: null, position, closeRequested: false });
   }
 
-  return finishClose(position, {
-    fillPrice: fillResult.fillPrice,
-    quantity: position.quantity,
-    commission: fillResult.commission,
-  });
+  return finishClose(
+    position,
+    {
+      fillPrice: fillResult.fillPrice,
+      quantity: position.quantity,
+      commission: fillResult.commission,
+    },
+    bar,
+    context,
+  );
 }
 
 /**
@@ -338,6 +418,7 @@ function tryExitOnTargetOnly(
   position: OpenPosition & { plannedTargetPrice: PriceUnits },
   bar: EngineBar,
   config: EngineConfig,
+  context: TradeContext,
 ): ProcessBarResult {
   const closingOrder: EngineOrder = {
     side: closingSide(position.direction),
@@ -360,11 +441,16 @@ function tryExitOnTargetOnly(
     return unchanged({ pendingOrder: null, position, closeRequested: false });
   }
 
-  return finishClose(position, {
-    fillPrice: fillResult.fillPrice,
-    quantity: position.quantity,
-    commission: fillResult.commission,
-  });
+  return finishClose(
+    position,
+    {
+      fillPrice: fillResult.fillPrice,
+      quantity: position.quantity,
+      commission: fillResult.commission,
+    },
+    bar,
+    context,
+  );
 }
 
 /**
@@ -380,6 +466,7 @@ function tryCloseAtMarket(
   position: OpenPosition,
   bar: EngineBar,
   config: EngineConfig,
+  context: TradeContext,
 ): ProcessBarResult {
   const closingOrder: EngineOrder = {
     side: closingSide(position.direction),
@@ -398,11 +485,16 @@ function tryCloseAtMarket(
     };
   }
 
-  return finishClose(position, {
-    fillPrice: fillResult.fillPrice,
-    quantity: position.quantity,
-    commission: fillResult.commission,
-  });
+  return finishClose(
+    position,
+    {
+      fillPrice: fillResult.fillPrice,
+      quantity: position.quantity,
+      commission: fillResult.commission,
+    },
+    bar,
+    context,
+  );
 }
 
 /**
@@ -436,11 +528,17 @@ function tryCloseAtMarket(
  * re-processing the same bar with nothing pending or requested is a
  * no-op; an unfilled/no-outcome check is idempotent (pure function, same
  * bar in -> same "nothing happened" out).
+ *
+ * `context` (M-11 Session 2) is only ever read on a CLOSE path (threaded
+ * into `finishClose` to stamp `instrumentId`/`simAccountId` onto the
+ * resulting `ClosedTrade`) -- opening a position needs no instrument/
+ * account identity of its own, only `bar.ts` for `entryTs`.
  */
 export function processBar(
   state: SimulatorBarState,
   bar: EngineBar,
   config: EngineConfig,
+  context: TradeContext,
 ): ProcessBarResult {
   if (state.pendingOrder && !state.position) {
     return tryFillPendingOrder(state.pendingOrder, bar, config);
@@ -452,14 +550,22 @@ export function processBar(
   }
 
   if (state.closeRequested) {
-    return tryCloseAtMarket(position, bar, config);
+    return tryCloseAtMarket(position, bar, config, context);
   }
 
-  if (position.plannedStopPrice !== undefined && position.plannedTargetPrice !== undefined) {
+  if (
+    position.plannedStopPrice !== undefined &&
+    position.plannedTargetPrice !== undefined
+  ) {
     return tryResolveBracket(
-      { ...position, plannedStopPrice: position.plannedStopPrice, plannedTargetPrice: position.plannedTargetPrice },
+      {
+        ...position,
+        plannedStopPrice: position.plannedStopPrice,
+        plannedTargetPrice: position.plannedTargetPrice,
+      },
       bar,
       config,
+      context,
     );
   }
   if (position.plannedStopPrice !== undefined) {
@@ -467,6 +573,7 @@ export function processBar(
       { ...position, plannedStopPrice: position.plannedStopPrice },
       bar,
       config,
+      context,
     );
   }
   if (position.plannedTargetPrice !== undefined) {
@@ -474,6 +581,7 @@ export function processBar(
       { ...position, plannedTargetPrice: position.plannedTargetPrice },
       bar,
       config,
+      context,
     );
   }
 

@@ -1,8 +1,14 @@
+import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { ReplaySimulator } from "@/features/simulator";
-import { getCandles, getInstrumentBySymbol } from "@/services/market-data/candles";
+import {
+  getCandles,
+  getInstrumentBySymbol,
+} from "@/services/market-data/candles";
+import { getOrCreateDefaultSimAccount } from "@/services/simulator/sim-accounts";
 
 // Same starter set as /chart (ADR-016) — not a general instrument search.
 const INSTRUMENT_OPTIONS = ["AAPL", "MSFT", "SPY", "BTC-USD"] as const;
@@ -35,6 +41,28 @@ export default async function ReplayPage({
         <p className="text-muted-foreground text-sm">
           No instrument found for &ldquo;{symbol}&rdquo;.
         </p>
+      </div>
+    );
+  }
+
+  // M-11 Session 2: a simulator session needs a real sim_account to stamp
+  // closed trades with (ClosedTrade.simAccountId). getOrCreateDefaultSimAccount
+  // returns null only when nobody's signed in -- src/proxy.ts already
+  // redirects an unauthenticated visit to /login before this page renders,
+  // so this branch is normally unreachable; it's here for the small race
+  // window between that check and this one (see the service's own comment).
+  const simAccount = await getOrCreateDefaultSimAccount();
+
+  if (!simAccount) {
+    return (
+      <div className="flex flex-col gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Replay</h1>
+        <p className="text-muted-foreground text-sm">
+          Sign in to practice trading in replay.
+        </p>
+        <Button variant="outline" className="w-fit" asChild>
+          <Link href="/login">Log in</Link>
+        </Button>
       </div>
     );
   }
@@ -79,6 +107,8 @@ export default async function ReplayPage({
         candles={candles}
         instrumentLabel={instrument.symbol}
         timeframeLabel={TIMEFRAME_LABEL}
+        instrumentId={instrument.id}
+        simAccountId={simAccount.id}
       />
     </div>
   );

@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { ENGINE_VERSION, type EngineBar, type EngineConfig } from "@/lib/engine/types";
-import { toMoneyUnits, toPriceUnits, toQuantityUnits } from "@/lib/engine/units";
+import {
+  ENGINE_VERSION,
+  type EngineBar,
+  type EngineConfig,
+} from "@/lib/engine/types";
+import {
+  toMoneyUnits,
+  toPriceUnits,
+  toQuantityUnits,
+} from "@/lib/engine/units";
 
 import { processBar, type SimulatorBarState } from "./process-bar";
 import type { OrderTicketSubmission } from "./order-ticket-schema";
-import type { OpenPosition } from "./types";
+import type { OpenPosition, TradeContext } from "./types";
 
 // Round, easy-to-hand-check numbers: $0.50 flat slippage magnitude, $1.00
 // flat commission per fill -- not the app's real DEFAULT_ENGINE_CONFIG
@@ -15,6 +23,19 @@ const TEST_CONFIG: EngineConfig = {
   slippage: { model: "fixed_amount", value: toPriceUnits(0.5) },
   commission: { model: "flat", value: toMoneyUnits(1) },
 };
+
+// M-11 Session 2 -- which instrument/sim_account processBar stamps onto a
+// closed trade. Arbitrary IDs; these tests only check they're threaded
+// through unchanged, never validated or looked up.
+const TEST_CONTEXT: TradeContext = {
+  instrumentId: "instrument-1",
+  simAccountId: "account-1",
+};
+
+// One day before `bar()`'s default ts ("2026-01-02T00:00:00Z") -- distinct
+// on purpose so a closed trade's entryTs/exitTs are provably not the same
+// value by accident.
+const TEST_ENTRY_TS = "2026-01-01T00:00:00Z";
 
 function bar(overrides: Partial<EngineBar>): EngineBar {
   return {
@@ -38,7 +59,7 @@ function state(overrides: Partial<SimulatorBarState> = {}): SimulatorBarState {
 
 describe("processBar -- idle (nothing pending, nothing open)", () => {
   it("does nothing", () => {
-    const result = processBar(state(), bar({}), TEST_CONFIG);
+    const result = processBar(state(), bar({}), TEST_CONFIG, TEST_CONTEXT);
     expect(result).toEqual({
       pendingOrder: null,
       position: null,
@@ -58,7 +79,12 @@ describe("processBar -- filling a pending market order", () => {
     };
     const revealedBar = bar({ open: toPriceUnits(100) });
 
-    const result = processBar(state({ pendingOrder }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ pendingOrder }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     // fillPrice = open $100.00 + $0.50 slippage = $100.50
     expect(result.pendingOrder).toBeNull();
@@ -71,6 +97,9 @@ describe("processBar -- filling a pending market order", () => {
       quantity: toQuantityUnits(10),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      // entryTs is the FILL bar's own ts, not a fixture constant -- proves
+      // tryFillPendingOrder stamps it from the real revealed bar.
+      entryTs: revealedBar.ts,
     });
   });
 
@@ -84,7 +113,12 @@ describe("processBar -- filling a pending market order", () => {
     };
     const revealedBar = bar({ open: toPriceUnits(50) });
 
-    const result = processBar(state({ pendingOrder }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ pendingOrder }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     // fillPrice = open $50.00 - $0.50 slippage = $49.50 (a sell receives less)
     expect(result.position).toEqual<OpenPosition>({
@@ -93,6 +127,7 @@ describe("processBar -- filling a pending market order", () => {
       quantity: toQuantityUnits(4),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: revealedBar.ts,
       plannedStopPrice: toPriceUnits(51),
       plannedTargetPrice: toPriceUnits(47),
     });
@@ -111,7 +146,12 @@ describe("processBar -- filling a pending limit order", () => {
     // bar's low is $99, so it isn't touched.
     const revealedBar = bar({ low: toPriceUnits(99) });
 
-    const result = processBar(state({ pendingOrder }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ pendingOrder }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     expect(result).toEqual({
       pendingOrder,
@@ -131,7 +171,12 @@ describe("processBar -- filling a pending limit order", () => {
     };
     const revealedBar = bar({ low: toPriceUnits(94) });
 
-    const result = processBar(state({ pendingOrder }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ pendingOrder }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     expect(result.position?.entryPrice).toBe(toPriceUnits(95));
     expect(result.position?.entryCommission).toBe(toMoneyUnits(1));
@@ -150,7 +195,12 @@ describe("processBar -- filling a pending stop (entry) order", () => {
     // bar's high is $101, so it isn't touched.
     const revealedBar = bar({ high: toPriceUnits(101) });
 
-    const result = processBar(state({ pendingOrder }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ pendingOrder }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     expect(result).toEqual({
       pendingOrder,
@@ -170,7 +220,12 @@ describe("processBar -- filling a pending stop (entry) order", () => {
     };
     const revealedBar = bar({ high: toPriceUnits(111) });
 
-    const result = processBar(state({ pendingOrder }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ pendingOrder }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     // fillPrice = stop $110.00 + $0.50 slippage = $110.50
     expect(result.position?.entryPrice).toBe(toPriceUnits(110.5));
@@ -185,7 +240,12 @@ describe("processBar -- a structurally invalid order is dropped, not left pendin
       quantity: toQuantityUnits(0),
     };
 
-    const result = processBar(state({ pendingOrder }), bar({}), TEST_CONFIG);
+    const result = processBar(
+      state({ pendingOrder }),
+      bar({}),
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     expect(result).toEqual({
       pendingOrder: null,
@@ -213,7 +273,12 @@ describe("processBar -- a fill that would open an invalid position is rejected, 
     };
     const revealedBar = bar({ open: toPriceUnits(100) }); // fills at $100.50
 
-    const result = processBar(state({ pendingOrder }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ pendingOrder }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     expect(result).toEqual({
       pendingOrder: null,
@@ -233,10 +298,16 @@ describe("processBar -- a position with NEITHER stop nor target just stays open"
       quantity: toQuantityUnits(1),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
     };
     const revealedBar = bar({ low: toPriceUnits(50), high: toPriceUnits(200) });
 
-    const result = processBar(state({ position }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ position }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     expect(result).toEqual({
       pendingOrder: null,
@@ -255,6 +326,7 @@ describe("processBar -- bracket resolution on an open position with a complete b
     quantity: toQuantityUnits(10),
     entryCommission: toMoneyUnits(1),
     entryEngineVersion: ENGINE_VERSION,
+    entryTs: TEST_ENTRY_TS,
     plannedStopPrice: toPriceUnits(95),
     plannedTargetPrice: toPriceUnits(110),
   };
@@ -262,7 +334,12 @@ describe("processBar -- bracket resolution on an open position with a complete b
   it("neither level touched -- position stays open, unchanged", () => {
     const revealedBar = bar({ high: toPriceUnits(105), low: toPriceUnits(98) });
 
-    const result = processBar(state({ position: OPEN_LONG }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ position: OPEN_LONG }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     expect(result).toEqual({
       pendingOrder: null,
@@ -274,9 +351,17 @@ describe("processBar -- bracket resolution on an open position with a complete b
   });
 
   it("target touched -- fills at EXACTLY $110 (no slippage), full close", () => {
-    const revealedBar = bar({ high: toPriceUnits(112), low: toPriceUnits(104) });
+    const revealedBar = bar({
+      high: toPriceUnits(112),
+      low: toPriceUnits(104),
+    });
 
-    const result = processBar(state({ position: OPEN_LONG }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ position: OPEN_LONG }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     // priceDelta = exit $110.00 - entry $100.00 = $10.00 x 10 sh = $100.00 gross
     // fees = $1.00 entry + $1.00 exit = $2.00
@@ -288,11 +373,20 @@ describe("processBar -- bracket resolution on an open position with a complete b
     expect(result.closeRequested).toBe(false);
     expect(result.error).toBeNull();
     expect(result.closedTrade).toEqual({
-      ok: true,
+      instrumentId: TEST_CONTEXT.instrumentId,
+      simAccountId: TEST_CONTEXT.simAccountId,
+      direction: "long",
+      entryTs: TEST_ENTRY_TS,
+      exitTs: revealedBar.ts,
+      avgEntry: toPriceUnits(100),
+      avgExit: toPriceUnits(110),
+      quantity: toQuantityUnits(10),
       grossPnl: toMoneyUnits(100),
       fees: toMoneyUnits(2),
       netPnl: toMoneyUnits(98),
       rMultiple: 1.96,
+      plannedStop: toPriceUnits(95),
+      plannedTarget: toPriceUnits(110),
       engineVersion: ENGINE_VERSION,
     });
   });
@@ -300,7 +394,12 @@ describe("processBar -- bracket resolution on an open position with a complete b
   it("stop touched -- fills at stop price MINUS slippage (a sell receives less), full close", () => {
     const revealedBar = bar({ high: toPriceUnits(99), low: toPriceUnits(94) });
 
-    const result = processBar(state({ position: OPEN_LONG }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ position: OPEN_LONG }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     // fillPrice = stop $95.00 - $0.50 slippage = $94.50
     // priceDelta = exit $94.50 - entry $100.00 = -$5.50 x 10 sh = -$55.00 gross
@@ -309,11 +408,20 @@ describe("processBar -- bracket resolution on an open position with a complete b
     // risk = $100.00 - $95.00 = $5.00 x 10 sh = $50.00
     // R = -$57.00 / $50.00 = -1.14
     expect(result.closedTrade).toEqual({
-      ok: true,
+      instrumentId: TEST_CONTEXT.instrumentId,
+      simAccountId: TEST_CONTEXT.simAccountId,
+      direction: "long",
+      entryTs: TEST_ENTRY_TS,
+      exitTs: revealedBar.ts,
+      avgEntry: toPriceUnits(100),
+      avgExit: toPriceUnits(94.5),
+      quantity: toQuantityUnits(10),
       grossPnl: toMoneyUnits(-55),
       fees: toMoneyUnits(2),
       netPnl: toMoneyUnits(-57),
       rMultiple: -1.14,
+      plannedStop: toPriceUnits(95),
+      plannedTarget: toPriceUnits(110),
       engineVersion: ENGINE_VERSION,
     });
   });
@@ -327,11 +435,17 @@ describe("processBar -- TD-10: single-leg exit, stop only (no target)", () => {
       quantity: toQuantityUnits(1),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(95),
     };
     const revealedBar = bar({ low: toPriceUnits(99) }); // 99 > 95, not touched
 
-    const result = processBar(state({ position }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ position }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     expect(result).toEqual({
       pendingOrder: null,
@@ -349,11 +463,17 @@ describe("processBar -- TD-10: single-leg exit, stop only (no target)", () => {
       quantity: toQuantityUnits(20),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(45),
     };
     const revealedBar = bar({ low: toPriceUnits(44) }); // touches $45
 
-    const result = processBar(state({ position }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ position }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     // Closing a long is a SELL -- fillStopOrder: fillPrice = stop $45.00 - $0.50 slippage = $44.50
     // priceDelta = exit $44.50 - entry $50.00 = -$5.50 x 20 sh = -$110.00 gross
@@ -362,11 +482,19 @@ describe("processBar -- TD-10: single-leg exit, stop only (no target)", () => {
     expect(result.position).toBeNull();
     expect(result.closeRequested).toBe(false);
     expect(result.closedTrade).toEqual({
-      ok: true,
+      instrumentId: TEST_CONTEXT.instrumentId,
+      simAccountId: TEST_CONTEXT.simAccountId,
+      direction: "long",
+      entryTs: TEST_ENTRY_TS,
+      exitTs: revealedBar.ts,
+      avgEntry: toPriceUnits(50),
+      avgExit: toPriceUnits(44.5),
+      quantity: toQuantityUnits(20),
       grossPnl: toMoneyUnits(-110),
       fees: toMoneyUnits(2),
       netPnl: toMoneyUnits(-112),
       rMultiple: -1.12,
+      plannedStop: toPriceUnits(45),
       engineVersion: ENGINE_VERSION,
     });
   });
@@ -378,22 +506,36 @@ describe("processBar -- TD-10: single-leg exit, stop only (no target)", () => {
       quantity: toQuantityUnits(20),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(55),
     };
     const revealedBar = bar({ high: toPriceUnits(56) }); // touches $55
 
-    const result = processBar(state({ position }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ position }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     // Closing a short is a BUY -- fillStopOrder: fillPrice = stop $55.00 + $0.50 slippage = $55.50
     // priceDelta (short) = entry $50.00 - exit $55.50 = -$5.50 x 20 sh = -$110.00 gross
     // fees = $2.00 -> net = -$112.00
     // risk = stop $55.00 - entry $50.00 = $5.00 x 20 sh = $100.00 -> R = -1.12
     expect(result.closedTrade).toEqual({
-      ok: true,
+      instrumentId: TEST_CONTEXT.instrumentId,
+      simAccountId: TEST_CONTEXT.simAccountId,
+      direction: "short",
+      entryTs: TEST_ENTRY_TS,
+      exitTs: revealedBar.ts,
+      avgEntry: toPriceUnits(50),
+      avgExit: toPriceUnits(55.5),
+      quantity: toQuantityUnits(20),
       grossPnl: toMoneyUnits(-110),
       fees: toMoneyUnits(2),
       netPnl: toMoneyUnits(-112),
       rMultiple: -1.12,
+      plannedStop: toPriceUnits(55),
       engineVersion: ENGINE_VERSION,
     });
   });
@@ -405,11 +547,17 @@ describe("processBar -- TD-10: single-leg exit, stop only (no target)", () => {
       quantity: toQuantityUnits(0),
       entryCommission: toMoneyUnits(0),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(95),
     };
     const revealedBar = bar({ low: toPriceUnits(90) });
 
-    const result = processBar(state({ position }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ position }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     expect(result).toEqual({
       pendingOrder: null,
@@ -429,11 +577,17 @@ describe("processBar -- TD-10: single-leg exit, target only (no stop)", () => {
       quantity: toQuantityUnits(1),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedTargetPrice: toPriceUnits(110),
     };
     const revealedBar = bar({ high: toPriceUnits(105) }); // 105 < 110, not touched
 
-    const result = processBar(state({ position }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ position }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     expect(result).toEqual({
       pendingOrder: null,
@@ -451,21 +605,35 @@ describe("processBar -- TD-10: single-leg exit, target only (no stop)", () => {
       quantity: toQuantityUnits(10),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedTargetPrice: toPriceUnits(110),
     };
     const revealedBar = bar({ high: toPriceUnits(112) }); // touches $110
 
-    const result = processBar(state({ position }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ position }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     // priceDelta = exit $110.00 - entry $100.00 = $10.00 x 10 sh = $100.00 gross
     // fees = $1.00 + $1.00 = $2.00 -> net = $98.00; no plannedStopPrice -> rMultiple null
     expect(result.position).toBeNull();
     expect(result.closedTrade).toEqual({
-      ok: true,
+      instrumentId: TEST_CONTEXT.instrumentId,
+      simAccountId: TEST_CONTEXT.simAccountId,
+      direction: "long",
+      entryTs: TEST_ENTRY_TS,
+      exitTs: revealedBar.ts,
+      avgEntry: toPriceUnits(100),
+      avgExit: toPriceUnits(110),
+      quantity: toQuantityUnits(10),
       grossPnl: toMoneyUnits(100),
       fees: toMoneyUnits(2),
       netPnl: toMoneyUnits(98),
       rMultiple: null,
+      plannedTarget: toPriceUnits(110),
       engineVersion: ENGINE_VERSION,
     });
   });
@@ -477,20 +645,34 @@ describe("processBar -- TD-10: single-leg exit, target only (no stop)", () => {
       quantity: toQuantityUnits(20),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedTargetPrice: toPriceUnits(45),
     };
     const revealedBar = bar({ low: toPriceUnits(44) }); // touches $45
 
-    const result = processBar(state({ position }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ position }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     // priceDelta (short) = entry $50.00 - exit $45.00 = $5.00 x 20 sh = $100.00 gross
     // fees = $2.00 -> net = $98.00; no plannedStopPrice -> rMultiple null
     expect(result.closedTrade).toEqual({
-      ok: true,
+      instrumentId: TEST_CONTEXT.instrumentId,
+      simAccountId: TEST_CONTEXT.simAccountId,
+      direction: "short",
+      entryTs: TEST_ENTRY_TS,
+      exitTs: revealedBar.ts,
+      avgEntry: toPriceUnits(50),
+      avgExit: toPriceUnits(45),
+      quantity: toQuantityUnits(20),
       grossPnl: toMoneyUnits(100),
       fees: toMoneyUnits(2),
       netPnl: toMoneyUnits(98),
       rMultiple: null,
+      plannedTarget: toPriceUnits(45),
       engineVersion: ENGINE_VERSION,
     });
   });
@@ -502,11 +684,17 @@ describe("processBar -- TD-10: single-leg exit, target only (no stop)", () => {
       quantity: toQuantityUnits(0),
       entryCommission: toMoneyUnits(0),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedTargetPrice: toPriceUnits(110),
     };
     const revealedBar = bar({ high: toPriceUnits(112) });
 
-    const result = processBar(state({ position }), revealedBar, TEST_CONFIG);
+    const result = processBar(
+      state({ position }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     expect(result).toEqual({
       pendingOrder: null,
@@ -526,6 +714,7 @@ describe("processBar -- TD-10: manual close", () => {
       quantity: toQuantityUnits(10),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(95),
     };
     const revealedBar = bar({ open: toPriceUnits(105) });
@@ -534,6 +723,7 @@ describe("processBar -- TD-10: manual close", () => {
       state({ position, closeRequested: true }),
       revealedBar,
       TEST_CONFIG,
+      TEST_CONTEXT,
     );
 
     // Closing a long is a SELL -- fillMarketOrder: fillPrice = open $105.00 - $0.50 slippage = $104.50
@@ -545,11 +735,19 @@ describe("processBar -- TD-10: manual close", () => {
     expect(result.closeRequested).toBe(false);
     expect(result.error).toBeNull();
     expect(result.closedTrade).toEqual({
-      ok: true,
+      instrumentId: TEST_CONTEXT.instrumentId,
+      simAccountId: TEST_CONTEXT.simAccountId,
+      direction: "long",
+      entryTs: TEST_ENTRY_TS,
+      exitTs: revealedBar.ts,
+      avgEntry: toPriceUnits(100),
+      avgExit: toPriceUnits(104.5),
+      quantity: toQuantityUnits(10),
       grossPnl: toMoneyUnits(45),
       fees: toMoneyUnits(2),
       netPnl: toMoneyUnits(43),
       rMultiple: 0.86,
+      plannedStop: toPriceUnits(95),
       engineVersion: ENGINE_VERSION,
     });
   });
@@ -567,15 +765,21 @@ describe("processBar -- TD-10: manual close", () => {
       quantity: toQuantityUnits(10),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(95),
       plannedTargetPrice: toPriceUnits(110),
     };
-    const revealedBar = bar({ open: toPriceUnits(105), high: toPriceUnits(112), low: toPriceUnits(104) });
+    const revealedBar = bar({
+      open: toPriceUnits(105),
+      high: toPriceUnits(112),
+      low: toPriceUnits(104),
+    });
 
     const result = processBar(
       state({ position, closeRequested: true }),
       revealedBar,
       TEST_CONFIG,
+      TEST_CONTEXT,
     );
 
     // Same $104.50 market-fill math as the previous test -- NOT the
@@ -590,6 +794,7 @@ describe("processBar -- TD-10: manual close", () => {
       quantity: toQuantityUnits(0),
       entryCommission: toMoneyUnits(0),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
     };
     const revealedBar = bar({ open: toPriceUnits(105) });
 
@@ -597,6 +802,7 @@ describe("processBar -- TD-10: manual close", () => {
       state({ position, closeRequested: true }),
       revealedBar,
       TEST_CONFIG,
+      TEST_CONTEXT,
     );
 
     expect(result).toEqual({
@@ -617,11 +823,17 @@ describe("processBar -- defensive: malformed brackets/positions surface a typed 
       quantity: toQuantityUnits(1),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(110), // above target -- invalid for a long
       plannedTargetPrice: toPriceUnits(105),
     };
 
-    const result = processBar(state({ position: malformedPosition }), bar({}), TEST_CONFIG);
+    const result = processBar(
+      state({ position: malformedPosition }),
+      bar({}),
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
 
     expect(result).toEqual({
       pendingOrder: null,
@@ -639,6 +851,7 @@ describe("processBar -- defensive: malformed brackets/positions surface a typed 
       quantity: toQuantityUnits(0),
       entryCommission: toMoneyUnits(0),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(95),
       plannedTargetPrice: toPriceUnits(110),
     };
@@ -648,6 +861,7 @@ describe("processBar -- defensive: malformed brackets/positions surface a typed 
       state({ position: zeroQuantityPosition }),
       revealedBar,
       TEST_CONFIG,
+      TEST_CONTEXT,
     );
 
     expect(result).toEqual({
@@ -663,18 +877,21 @@ describe("processBar -- defensive: malformed brackets/positions surface a typed 
     // A valid bracket (stop $105 < target $110 -- resolveBracket accepts
     // it) but an invalid STOP relative to the $100 entry (must be BELOW
     // entry for a long) -- the exact "bubbles the engine's INVALID_STOP"
-    // case Session 1's position.test.ts documents, reachable here via a
-    // hand-built fixture the same way an addToPosition (TD-08) could
-    // produce one for real. fullyClosePosition flattens this into its own
-    // OUTER `ok: false` (position.ts) rather than an inner `closed.ok:
-    // false` -- see process-bar.ts's comment on why the inner check is
-    // unreachable.
+    // case Session 1's position.test.ts documents, reachable here only via
+    // a hand-built fixture: TD-08 (paid) means `addToPosition` itself now
+    // rejects an add that would produce this, so this isn't a reachable
+    // app path today, just defensive coverage for however a position
+    // could otherwise end up here. fullyClosePosition flattens this into
+    // its own OUTER `ok: false` (position.ts) rather than an inner
+    // `closed.ok: false` -- see process-bar.ts's comment on why the inner
+    // check is unreachable.
     const invalidStopPosition: OpenPosition = {
       direction: "long",
       entryPrice: toPriceUnits(100),
       quantity: toQuantityUnits(1),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
       plannedStopPrice: toPriceUnits(105),
       plannedTargetPrice: toPriceUnits(110),
     };
@@ -684,6 +901,7 @@ describe("processBar -- defensive: malformed brackets/positions surface a typed 
       state({ position: invalidStopPosition }),
       revealedBar,
       TEST_CONFIG,
+      TEST_CONTEXT,
     );
 
     expect(result).toEqual({
@@ -705,16 +923,25 @@ describe("processBar -- re-visiting a bar never double-fills or double-closes", 
     };
     const revealedBar = bar({ open: toPriceUnits(100) });
 
-    const firstPass = processBar(state({ pendingOrder }), revealedBar, TEST_CONFIG);
+    const firstPass = processBar(
+      state({ pendingOrder }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
     expect(firstPass.position).not.toBeNull();
 
     // Simulate stepping back and forward to the same bar again: the store
     // would call processBar with whatever state resulted from the first
     // pass -- pendingOrder is already null, so nothing re-fills.
     const secondPass = processBar(
-      state({ pendingOrder: firstPass.pendingOrder, position: firstPass.position }),
+      state({
+        pendingOrder: firstPass.pendingOrder,
+        position: firstPass.position,
+      }),
       revealedBar,
       TEST_CONFIG,
+      TEST_CONTEXT,
     );
 
     expect(secondPass).toEqual({
@@ -733,19 +960,29 @@ describe("processBar -- re-visiting a bar never double-fills or double-closes", 
       quantity: toQuantityUnits(10),
       entryCommission: toMoneyUnits(1),
       entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
     };
     const revealedBar = bar({ open: toPriceUnits(105) });
 
-    const firstPass = processBar(state({ position, closeRequested: true }), revealedBar, TEST_CONFIG);
+    const firstPass = processBar(
+      state({ position, closeRequested: true }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
     expect(firstPass.position).toBeNull();
     expect(firstPass.closedTrade).not.toBeNull();
 
     // Step back and forward again: closeRequested is already false, and
     // there's no position left to close -- nothing happens twice.
     const secondPass = processBar(
-      state({ position: firstPass.position, closeRequested: firstPass.closeRequested }),
+      state({
+        position: firstPass.position,
+        closeRequested: firstPass.closeRequested,
+      }),
       revealedBar,
       TEST_CONFIG,
+      TEST_CONTEXT,
     );
 
     expect(secondPass).toEqual({
@@ -755,5 +992,91 @@ describe("processBar -- re-visiting a bar never double-fills or double-closes", 
       closedTrade: null,
       error: null,
     });
+  });
+});
+
+describe("processBar -- M-11 Session 2: a closed trade carries everything a `trades` row needs", () => {
+  it("entryTs is the OPEN bar's ts, exitTs is the CLOSE bar's ts -- not the same value, not swapped", () => {
+    const openBar = bar({
+      ts: "2026-03-02T00:00:00Z",
+      open: toPriceUnits(100),
+    });
+    const pendingOrder: OrderTicketSubmission = {
+      direction: "long",
+      orderType: "market",
+      quantity: toQuantityUnits(5),
+    };
+
+    const opened = processBar(
+      state({ pendingOrder }),
+      openBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
+    expect(opened.position?.entryTs).toBe("2026-03-02T00:00:00Z");
+
+    const closeBar = bar({
+      ts: "2026-03-05T00:00:00Z",
+      open: toPriceUnits(110),
+    });
+    const closed = processBar(
+      { pendingOrder: null, position: opened.position, closeRequested: true },
+      closeBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
+
+    expect(closed.closedTrade?.entryTs).toBe("2026-03-02T00:00:00Z");
+    expect(closed.closedTrade?.exitTs).toBe("2026-03-05T00:00:00Z");
+    expect(closed.closedTrade?.entryTs).not.toBe(closed.closedTrade?.exitTs);
+  });
+
+  it("stamps whichever instrumentId/simAccountId the CALLER passes -- not a hardcoded value", () => {
+    const otherContext: TradeContext = {
+      instrumentId: "instrument-2",
+      simAccountId: "account-2",
+    };
+    const position: OpenPosition = {
+      direction: "short",
+      entryPrice: toPriceUnits(50),
+      quantity: toQuantityUnits(3),
+      entryCommission: toMoneyUnits(1),
+      entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
+    };
+    const revealedBar = bar({ open: toPriceUnits(45) });
+
+    const result = processBar(
+      state({ position, closeRequested: true }),
+      revealedBar,
+      TEST_CONFIG,
+      otherContext,
+    );
+
+    expect(result.closedTrade?.instrumentId).toBe("instrument-2");
+    expect(result.closedTrade?.simAccountId).toBe("account-2");
+  });
+
+  it("a trade with no planned stop or target omits both plannedStop and plannedTarget, rather than sending them as undefined", () => {
+    const position: OpenPosition = {
+      direction: "long",
+      entryPrice: toPriceUnits(100),
+      quantity: toQuantityUnits(1),
+      entryCommission: toMoneyUnits(1),
+      entryEngineVersion: ENGINE_VERSION,
+      entryTs: TEST_ENTRY_TS,
+    };
+    const revealedBar = bar({ open: toPriceUnits(105) });
+
+    const result = processBar(
+      state({ position, closeRequested: true }),
+      revealedBar,
+      TEST_CONFIG,
+      TEST_CONTEXT,
+    );
+
+    expect(result.closedTrade).not.toBeNull();
+    expect(result.closedTrade).not.toHaveProperty("plannedStop");
+    expect(result.closedTrade).not.toHaveProperty("plannedTarget");
   });
 });

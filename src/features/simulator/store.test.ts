@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { ENGINE_VERSION, type EngineBar } from "@/lib/engine/types";
-import { toMoneyUnits, toPriceUnits, toQuantityUnits } from "@/lib/engine/units";
+import {
+  toMoneyUnits,
+  toPriceUnits,
+  toQuantityUnits,
+} from "@/lib/engine/units";
 
 import type { OrderTicketSubmission } from "./lib/order-ticket-schema";
 import { useSimulatorStore } from "./store";
@@ -31,7 +35,13 @@ const OPEN_LONG = {
   quantity: toQuantityUnits(1),
   entryCommission: toMoneyUnits(0),
   entryEngineVersion: ENGINE_VERSION,
+  entryTs: "2026-01-01T00:00:00Z",
 };
+
+// M-11 Session 2 -- arbitrary IDs; these tests only check onBarRevealed
+// threads them through to a closed trade unchanged, never validates them.
+const TEST_INSTRUMENT_ID = "instrument-1";
+const TEST_SIM_ACCOUNT_ID = "account-1";
 
 beforeEach(() => {
   useSimulatorStore.setState({
@@ -41,6 +51,8 @@ beforeEach(() => {
     orderError: null,
     lastPrice: null,
     closeRequested: false,
+    instrumentId: TEST_INSTRUMENT_ID,
+    simAccountId: TEST_SIM_ACCOUNT_ID,
   });
 });
 
@@ -56,6 +68,19 @@ describe("useSimulatorStore -- initial state", () => {
   });
 });
 
+describe("useSimulatorStore -- onBarRevealed requires a trade context (M-11 Session 2)", () => {
+  it("throws if called before reset(context) has ever set instrumentId/simAccountId", () => {
+    // Bypasses ReplaySimulator's render-time sync (which always calls
+    // reset(context) before any bar can be revealed) to exercise the
+    // otherwise-unreachable guard directly.
+    useSimulatorStore.setState({ instrumentId: null, simAccountId: null });
+
+    expect(() => useSimulatorStore.getState().onBarRevealed(bar())).toThrow(
+      /trade context/,
+    );
+  });
+});
+
 describe("useSimulatorStore -- submitOrder", () => {
   it("sets pendingOrder while flat", () => {
     useSimulatorStore.getState().submitOrder(MARKET_ORDER);
@@ -64,7 +89,10 @@ describe("useSimulatorStore -- submitOrder", () => {
 
   it("is a no-op while an order is already pending", () => {
     useSimulatorStore.getState().submitOrder(MARKET_ORDER);
-    const otherOrder: OrderTicketSubmission = { ...MARKET_ORDER, quantity: toQuantityUnits(99) };
+    const otherOrder: OrderTicketSubmission = {
+      ...MARKET_ORDER,
+      quantity: toQuantityUnits(99),
+    };
     useSimulatorStore.getState().submitOrder(otherOrder);
 
     expect(useSimulatorStore.getState().pendingOrder).toEqual(MARKET_ORDER);
@@ -107,7 +135,9 @@ describe("useSimulatorStore -- onBarRevealed delegates to the pure processBar", 
   it("a filled market order becomes an open position", () => {
     useSimulatorStore.getState().submitOrder(MARKET_ORDER);
 
-    useSimulatorStore.getState().onBarRevealed(bar({ open: toPriceUnits(100) }));
+    useSimulatorStore
+      .getState()
+      .onBarRevealed(bar({ open: toPriceUnits(100) }));
 
     const state = useSimulatorStore.getState();
     expect(state.pendingOrder).toBeNull();
@@ -116,15 +146,21 @@ describe("useSimulatorStore -- onBarRevealed delegates to the pure processBar", 
   });
 
   it("tracks lastPrice as the revealed bar's close, on every reveal (not just a fill)", () => {
-    useSimulatorStore.getState().onBarRevealed(bar({ close: toPriceUnits(101.5) }));
+    useSimulatorStore
+      .getState()
+      .onBarRevealed(bar({ close: toPriceUnits(101.5) }));
     expect(useSimulatorStore.getState().lastPrice).toBe(toPriceUnits(101.5));
 
-    useSimulatorStore.getState().onBarRevealed(bar({ close: toPriceUnits(102.25) }));
+    useSimulatorStore
+      .getState()
+      .onBarRevealed(bar({ close: toPriceUnits(102.25) }));
     expect(useSimulatorStore.getState().lastPrice).toBe(toPriceUnits(102.25));
   });
 
   it("a rejected fill surfaces orderError and clears both pendingOrder and position", () => {
-    useSimulatorStore.getState().submitOrder({ ...MARKET_ORDER, quantity: toQuantityUnits(0) });
+    useSimulatorStore
+      .getState()
+      .submitOrder({ ...MARKET_ORDER, quantity: toQuantityUnits(0) });
 
     useSimulatorStore.getState().onBarRevealed(bar({}));
 
@@ -138,7 +174,9 @@ describe("useSimulatorStore -- onBarRevealed delegates to the pure processBar", 
     useSimulatorStore.setState({ position: OPEN_LONG });
     useSimulatorStore.getState().requestClose();
 
-    useSimulatorStore.getState().onBarRevealed(bar({ open: toPriceUnits(105) }));
+    useSimulatorStore
+      .getState()
+      .onBarRevealed(bar({ open: toPriceUnits(105) }));
 
     const state = useSimulatorStore.getState();
     expect(state.position).toBeNull();
@@ -148,11 +186,15 @@ describe("useSimulatorStore -- onBarRevealed delegates to the pure processBar", 
 });
 
 describe("useSimulatorStore -- reset", () => {
-  it("returns to the initial state after being mutated", () => {
+  it("returns to the initial state after being mutated, and (re)stamps the given trade context", () => {
     useSimulatorStore.getState().submitOrder(MARKET_ORDER);
-    useSimulatorStore.getState().onBarRevealed(bar({ open: toPriceUnits(100) }));
+    useSimulatorStore
+      .getState()
+      .onBarRevealed(bar({ open: toPriceUnits(100) }));
 
-    useSimulatorStore.getState().reset();
+    useSimulatorStore
+      .getState()
+      .reset({ instrumentId: "instrument-2", simAccountId: "account-2" });
 
     const state = useSimulatorStore.getState();
     expect(state.pendingOrder).toBeNull();
@@ -161,5 +203,9 @@ describe("useSimulatorStore -- reset", () => {
     expect(state.orderError).toBeNull();
     expect(state.lastPrice).toBeNull();
     expect(state.closeRequested).toBe(false);
+    // The whole point of reset(context) over a plain reset(): the new
+    // instrument/account are set, not nulled out along with everything else.
+    expect(state.instrumentId).toBe("instrument-2");
+    expect(state.simAccountId).toBe("account-2");
   });
 });

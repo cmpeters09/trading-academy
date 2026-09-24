@@ -34,6 +34,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Deno code (Edge Functions) -- same reasoning as tsconfig.json's
+    // exclude: this repo's ESLint config is wired to the Node/Next
+    // TypeScript project and doesn't know `npm:` specifiers or the `Deno`
+    // global. Linted by `deno lint` instead, not this config.
+    "supabase/functions/**",
   ]),
 ]);
 

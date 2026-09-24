@@ -124,6 +124,47 @@ export type Database = {
           },
         ]
       }
+      executions: {
+        Row: {
+          commission: number
+          engine_version: string
+          fill_price: number
+          fill_ts: string
+          id: string
+          order_id: string
+          quantity: number
+          slippage: number
+        }
+        Insert: {
+          commission?: number
+          engine_version: string
+          fill_price: number
+          fill_ts: string
+          id?: string
+          order_id: string
+          quantity: number
+          slippage?: number
+        }
+        Update: {
+          commission?: number
+          engine_version?: string
+          fill_price?: number
+          fill_ts?: string
+          id?: string
+          order_id?: string
+          quantity?: number
+          slippage?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "executions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       instruments: {
         Row: {
           asset_class: string
@@ -156,6 +197,76 @@ export type Database = {
           tick_size?: number
         }
         Relationships: []
+      }
+      orders: {
+        Row: {
+          created_at: string
+          id: string
+          instrument_id: string
+          limit_price: number | null
+          placed_at_ts: string
+          quantity: number
+          replay_session_id: string | null
+          side: string
+          sim_account_id: string
+          status: string
+          stop_price: number | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instrument_id: string
+          limit_price?: number | null
+          placed_at_ts: string
+          quantity: number
+          replay_session_id?: string | null
+          side: string
+          sim_account_id: string
+          status?: string
+          stop_price?: number | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instrument_id?: string
+          limit_price?: number | null
+          placed_at_ts?: string
+          quantity?: number
+          replay_session_id?: string | null
+          side?: string
+          sim_account_id?: string
+          status?: string
+          stop_price?: number | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_sim_account_id_fkey"
+            columns: ["sim_account_id"]
+            isOneToOne: false
+            referencedRelation: "sim_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -192,6 +303,168 @@ export type Database = {
           xp_total?: number
         }
         Relationships: []
+      }
+      sim_accounts: {
+        Row: {
+          balance: number
+          created_at: string
+          currency: string
+          id: string
+          is_default: boolean
+          name: string
+          starting_balance: number
+          user_id: string
+        }
+        Insert: {
+          balance: number
+          created_at?: string
+          currency?: string
+          id?: string
+          is_default?: boolean
+          name?: string
+          starting_balance?: number
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          is_default?: boolean
+          name?: string
+          starting_balance?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sim_accounts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trade_orders: {
+        Row: {
+          order_id: string
+          trade_id: string
+        }
+        Insert: {
+          order_id: string
+          trade_id: string
+        }
+        Update: {
+          order_id?: string
+          trade_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trade_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_orders_trade_id_fkey"
+            columns: ["trade_id"]
+            isOneToOne: false
+            referencedRelation: "trades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trades: {
+        Row: {
+          avg_entry: number
+          avg_exit: number
+          created_at: string
+          deleted_at: string | null
+          direction: string
+          engine_version: string
+          entry_ts: string
+          exit_ts: string
+          fees: number
+          gross_pnl: number
+          id: string
+          instrument_id: string
+          net_pnl: number
+          planned_stop: number | null
+          planned_target: number | null
+          quantity: number
+          r_multiple: number | null
+          replay_session_id: string | null
+          sim_account_id: string
+          user_id: string
+        }
+        Insert: {
+          avg_entry: number
+          avg_exit: number
+          created_at?: string
+          deleted_at?: string | null
+          direction: string
+          engine_version: string
+          entry_ts: string
+          exit_ts: string
+          fees?: number
+          gross_pnl: number
+          id?: string
+          instrument_id: string
+          net_pnl: number
+          planned_stop?: number | null
+          planned_target?: number | null
+          quantity: number
+          r_multiple?: number | null
+          replay_session_id?: string | null
+          sim_account_id: string
+          user_id: string
+        }
+        Update: {
+          avg_entry?: number
+          avg_exit?: number
+          created_at?: string
+          deleted_at?: string | null
+          direction?: string
+          engine_version?: string
+          entry_ts?: string
+          exit_ts?: string
+          fees?: number
+          gross_pnl?: number
+          id?: string
+          instrument_id?: string
+          net_pnl?: number
+          planned_stop?: number | null
+          planned_target?: number | null
+          quantity?: number
+          r_multiple?: number | null
+          replay_session_id?: string | null
+          sim_account_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trades_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trades_sim_account_id_fkey"
+            columns: ["sim_account_id"]
+            isOneToOne: false
+            referencedRelation: "sim_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trades_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_settings: {
         Row: {
@@ -252,12 +525,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -281,11 +554,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -306,11 +579,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -331,11 +604,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -348,11 +621,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

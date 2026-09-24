@@ -40,11 +40,24 @@ export type PositionFill = {
  * a newer engine version. A position's *entry* identity is set at open.
  *
  * `plannedStopPrice`/`plannedTargetPrice` are each independently optional
- * and validated only against `entryPrice` at the moment they're set
- * (`openPosition`) — `addToPosition` does not re-validate a carried-over
- * stop/target against the position's new weighted-average entry price. See
- * the feature README's "Known limitations" for why that's a real, named
- * gap rather than an oversight.
+ * and validated against `entryPrice` at the moment they're set
+ * (`openPosition`) — `addToPosition` (TD-08, paid) re-validates
+ * `plannedStopPrice` again against the NEW weighted-average entry price
+ * and rejects the add (`INVALID_STOP`) if it would strand the stop on the
+ * wrong side, rather than silently carrying an invalid one forward.
+ * `plannedTargetPrice` is NOT re-validated by `addToPosition` — the engine
+ * never enforces a target's side at close time either (`closePosition`'s
+ * input has no `plannedTargetPrice` field), so there is no downstream
+ * failure this would be closing a gap for.
+ *
+ * `entryTs` (M-11 Session 2) is the bar timestamp of the fill that OPENED
+ * this position (market time, not wall clock -- matches every other `ts`
+ * in this feature). Stamped once at `openPosition` and, like
+ * `entryEngineVersion`, never touched by a later `addToPosition` -- a
+ * position's entry identity (when and under what engine version it began)
+ * is fixed at open. This is what lets a closed trade report `entry_ts`
+ * (DATABASE_SCHEMA.md `trades`) without the store having to track it as
+ * separate, driftable state.
  */
 export type OpenPosition = {
   direction: "long" | "short";
@@ -52,8 +65,25 @@ export type OpenPosition = {
   quantity: QuantityUnits;
   entryCommission: MoneyUnits;
   entryEngineVersion: string;
+  entryTs: string;
   plannedStopPrice?: PriceUnits;
   plannedTargetPrice?: PriceUnits;
+};
+
+/**
+ * Which instrument and `sim_account` the current simulator session is
+ * trading against (M-11 Session 2). Not part of `OpenPosition` itself --
+ * unlike `entryTs`/`entryEngineVersion`, these describe the SESSION a
+ * position was opened in, not the position's own entry fill, and a session
+ * only ever trades one instrument against one account at a time (ReplaySimulator).
+ * Threaded through `processBar` only to stamp a closed trade with what a
+ * `trades` row needs (`instrument_id`/`sim_account_id`); the engine and
+ * position reducer stay ignorant of both, same as they're ignorant of
+ * `user_id`.
+ */
+export type TradeContext = {
+  instrumentId: string;
+  simAccountId: string;
 };
 
 /** A domain-level rejection (§7 class 1) — never thrown. Same shape as the engine's `EngineError`. */
@@ -63,13 +93,13 @@ export type OpenPositionInput = {
   direction: "long" | "short";
   fill: PositionFill;
   engineVersion: string;
+  entryTs: string;
   plannedStopPrice?: PriceUnits;
   plannedTargetPrice?: PriceUnits;
 };
 
 export type OpenPositionResult =
-  | { ok: true; position: OpenPosition }
-  | { ok: false; error: PositionError };
+  { ok: true; position: OpenPosition } | { ok: false; error: PositionError };
 
 export type AddToPositionInput = {
   position: OpenPosition;
@@ -77,8 +107,7 @@ export type AddToPositionInput = {
 };
 
 export type AddToPositionResult =
-  | { ok: true; position: OpenPosition }
-  | { ok: false; error: PositionError };
+  { ok: true; position: OpenPosition } | { ok: false; error: PositionError };
 
 export type ClosePositionInput = {
   position: OpenPosition;
