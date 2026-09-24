@@ -6,9 +6,15 @@ import { defineConfig } from "vitest/config";
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * ADR-010 — unit tests only (fill engine, stats, XP, position sizing).
- * E2E stays on Playwright; component tests aren't in scope yet (no complex
- * interactive components exist to test per ADR-010 §4).
+ * ADR-010 — unit tests (fill engine, stats, XP, position sizing) plus
+ * component tests for the complex interactive components ADR-010 §4 names
+ * (order ticket). E2E stays on Playwright.
+ *
+ * The default environment stays "node": pure-logic tests don't pay for a
+ * DOM. A component test opts into jsdom per file with a
+ * `// @vitest-environment jsdom` docblock (TD-09) — Vitest 4 dropped
+ * `environmentMatchGlobs`, and a per-file opt-in keeps the choice visible
+ * at the top of the file that needs it.
  */
 export default defineConfig({
   resolve: {
@@ -18,7 +24,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
     coverage: {
       provider: "v8",
       // ENGINEERING_PRINCIPLES §14 — coverage thresholds are per-directory,

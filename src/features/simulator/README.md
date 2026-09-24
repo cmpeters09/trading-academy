@@ -307,15 +307,15 @@ fullyClosePosition(input: ClosePositionInput) -> FullCloseResult
   (Session 1, stop re-validation added M-11 debt audit) is never called
   from the UI. Adding to, or partially closing, an open position isn't
   possible from this UI yet; no session has scheduled that UI work.
-- **`OrderTicket`, `PositionPanel`, `ReplaySimulator`, and
-  `SizeByRiskFields` have no component tests yet** (TD-09). The
-  validation/domain logic they depend on (`orderTicketSchema`,
-  `toOrderTicketSubmission`, `processBar`, `computePositionSize`,
-  `computeSizedQuantity`) is covered at 100% branches; the React wiring
-  around it is currently verified only by typecheck/lint and a manual,
-  live browser pass — the repo has no React Testing Library/jsdom
-  infrastructure yet, and adding it was deliberately deferred rather than
-  bundled into these sessions.
+- **`PositionPanel` and `ReplaySimulator` have no component tests.**
+  `OrderTicket` (including the `SizeByRiskFields` it renders) does, in
+  `components/OrderTicket.test.tsx` (TD-09, paid): conditional price
+  fields, inline error wiring, the size-by-risk flow, and exact
+  submissions. The domain logic behind the other two (`processBar`,
+  `computePositionSize`) is covered at 100% branches, but their React
+  wiring is verified only by typecheck/lint and a manual, live browser
+  pass. ADR-010 §4 names only the order ticket (and quiz) as needing
+  component tests; the jsdom setup now exists if these two get them later.
 - **"Planned entry price" (sizing) doesn't sync with the limit/stop
   price.** They're deliberately independent fields (Session 4) — sizing a
   position doesn't require the order to actually be a limit/stop order at
