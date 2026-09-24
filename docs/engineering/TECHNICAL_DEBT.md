@@ -128,6 +128,26 @@ Reviewed at every milestone boundary. If this list grows faster than it shrinks 
 - **Owner:** Christian
 - **Status:** open
 
+### TD-15 · Size-by-risk leaves a stale quantity behind when the final keystroke is rejected
+- **Incurred:** M-11 (TD-09 component tests), 2026-09-24
+- **Why:** `OrderTicket`'s size-by-risk helper recomputes on every keystroke (`recomputeSizedQuantity`, by design: live feedback). A partially typed value can briefly be a valid setup and write a quantity; if the finished value is then rejected by `/lib/engine`'s `computePositionSize`, the rejection path only updates the note and never clears `quantity`. Found while writing `OrderTicket.test.tsx`, which types the sizing inputs in a specific order to test the rejection cleanly (see the comment in that test). Deferred per Christian: form polish, not a correctness fix.
+- **What the user sees:** with a $100,000 balance, stop $50 and risk 1%, typing the entry as "50" first sizes on "5" (a $45 stop distance, 22.22 sh), then shows "Entry price and stop price must differ..." while the quantity field still reads 22.22.
+- **Risk if unpaid:** cosmetic. No bad data is saved or hidden: nothing is persisted yet (the M-11 write path doesn't exist), and the quantity field always shows exactly what would be submitted, so the same Zod validation as any typed quantity applies. The real cost is a mismatch the user has to notice: a quantity sitting next to a rejection note looks like the sizing result when it isn't, and someone who submits without reading it places a size that wasn't risk-sized.
+- **Proposed fix:** on a `rejected` outcome, clear the quantity only if the helper wrote it (track "last sized quantity" and compare, so a hand-typed quantity is never wiped). Add a component test for the typed-in-any-order case. ~30-60 min.
+- **Trigger to pay:** during a general simulator UX polish pass, or before any public launch.
+- **Owner:** Christian
+- **Status:** open
+
+### TD-16 · Order ticket reveals validation errors in two rounds
+- **Incurred:** M-11 (TD-09 component tests), 2026-09-24
+- **Why:** `orderTicketSchema`'s cross-field rules live in a `superRefine`, which Zod only runs once every per-field check passes. So when a per-field error exists (e.g. a blank quantity), rule errors like "Limit price is required for a limit order." or the stop/target side checks don't appear on the same submit. Found while writing `OrderTicket.test.tsx`. Deferred per Christian: form polish, not a correctness fix.
+- **What the user sees:** submitting a limit order with both quantity and limit price blank shows only "Enter a quantity greater than 0". After fixing that and submitting again, "Limit price is required for a limit order." appears for the first time.
+- **Risk if unpaid:** cosmetic. No invalid order can be submitted or saved (every rule still runs before `onSubmit` is called); it only takes an extra round-trip to see every problem.
+- **Proposed fix:** make the cross-field checks run even when other fields fail, e.g. Zod's `when` option on the refinement or restructuring the checks so each only depends on the fields it reads, then add a component test asserting both errors appear on one submit. ~30-60 min, including making sure `order-ticket-schema.test.ts` stays at 100% branches.
+- **Trigger to pay:** during a general simulator UX polish pass, or before any public launch.
+- **Owner:** Christian
+- **Status:** open
+
 ---
 
 ## Paid debt
